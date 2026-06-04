@@ -190,7 +190,7 @@ function isLocalDevelopmentHost() {
 }
 
 function getPreferredOnlineTransport() {
-  return typeof window.WebSocket === 'function' ? 'ws' : 'api';
+  return isLocalDevelopmentHost() && typeof window.WebSocket === 'function' ? 'ws' : 'api';
 }
 
 function getOnlineSocketUrl() {
