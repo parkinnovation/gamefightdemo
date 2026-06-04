@@ -6,9 +6,9 @@ const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
 const ASSET_ROOT_CANDIDATES = ['/AssetsGame', 'AssetsGame', '/assets', 'assets'];
 const FRAME_COUNT = 12;
-const ONLINE_STATE_PUSH_INTERVAL_MS = 80;
+const ONLINE_STATE_PUSH_INTERVAL_MS = 33;
 const ONLINE_API_POLL_INTERVAL_MS = 120;
-const ONLINE_INPUT_PUSH_INTERVAL_MS = 40;
+const ONLINE_INPUT_PUSH_INTERVAL_MS = 16;
 const ONLINE_WS_PATH = '/ws';
 
 const characters = [
@@ -271,10 +271,8 @@ function sendOnlineMessage(payload) {
           if (role === 'host') {
             setRoomStatus('Buscando oponente... aguardando conexao.');
           } else {
-            if (data.hostChoice && !state.playerChoice) {
-              state.playerChoice = { ...data.hostChoice };
-            }
-            state.cpuChoice = state.cpuChoice || { ...state.online.localChoice };
+            state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : state.playerChoice;
+            state.cpuChoice = data.hostChoice ? { ...data.hostChoice } : state.cpuChoice;
             setRoomStatus('Oponente encontrado. Conectando partida...');
           }
           dom.startFightBtn.disabled = true;
@@ -331,10 +329,8 @@ function handleOnlineMessage(payload) {
   }
   if (payload.type === 'joined') {
     setupOnlineSession(payload.roomId || '', 'guest', payload.sessionId || createClientId());
-    if (payload.hostChoice && !state.playerChoice) {
-      state.playerChoice = { ...payload.hostChoice };
-    }
-    state.cpuChoice = state.cpuChoice || { ...state.online.localChoice };
+    state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : state.playerChoice;
+    state.cpuChoice = payload.hostChoice ? { ...payload.hostChoice } : state.cpuChoice;
     setRoomStatus('Oponente encontrado. Conectando partida...');
     dom.startFightBtn.disabled = true;
     if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
@@ -374,10 +370,8 @@ function handleOnlineMessage(payload) {
       clearTimeout(state.online.connectionTimeoutId);
       state.online.connectionTimeoutId = null;
     }
-    if (payload.hostChoice && !state.playerChoice) {
-      state.playerChoice = { ...payload.hostChoice };
-    }
-    state.cpuChoice = state.cpuChoice || payload.guestChoice || { ...state.online.localChoice };
+    state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : state.playerChoice;
+    state.cpuChoice = payload.hostChoice ? { ...payload.hostChoice } : state.cpuChoice;
     if (!state.running) {
       startOnlineMatch(payload.snapshot || null);
     }
@@ -842,11 +836,9 @@ async function pollOnlineRoom() {
       }
       return;
     }
-    if (room.hostChoice && !state.playerChoice) {
-      state.playerChoice = { ...room.hostChoice };
-    }
-    if (room.guestChoice && !state.cpuChoice) {
-      state.cpuChoice = { ...room.guestChoice };
+    state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : state.playerChoice;
+    if (room.hostChoice && !state.cpuChoice) {
+      state.cpuChoice = { ...room.hostChoice };
     }
     if (room.matchStarted && room.latestSnapshot && !state.running) {
       startOnlineMatch(room.latestSnapshot);
@@ -883,6 +875,10 @@ function buildMatchSnapshot() {
     playerName: state.playerChoice?.name || 'JOGADOR 1',
     enemyName: state.cpuChoice?.name || 'JOGADOR 2'
   };
+}
+
+function isOnlineGuestPerspective() {
+  return state.mode === 'online' && state.online.role === 'guest';
 }
 
 function broadcastMatchState(force = false) {
@@ -933,17 +929,20 @@ function broadcastMatchState(force = false) {
 
 function applyMatchSnapshot(snapshot) {
   if (!snapshot) return;
-  applyFighterSnapshot(player, snapshot.player);
-  applyFighterSnapshot(cpu, snapshot.cpu);
+  const isGuest = isOnlineGuestPerspective();
+  const playerSnapshot = isGuest ? snapshot.cpu : snapshot.player;
+  const cpuSnapshot = isGuest ? snapshot.player : snapshot.cpu;
+  applyFighterSnapshot(player, playerSnapshot);
+  applyFighterSnapshot(cpu, cpuSnapshot);
   state.round = snapshot.round;
   state.timer = snapshot.timer;
-  state.playerRoundWins = snapshot.playerRoundWins;
-  state.cpuRoundWins = snapshot.cpuRoundWins;
+  state.playerRoundWins = isGuest ? snapshot.cpuRoundWins : snapshot.playerRoundWins;
+  state.cpuRoundWins = isGuest ? snapshot.playerRoundWins : snapshot.cpuRoundWins;
   state.roundOver = snapshot.roundOver;
   state.gameOver = snapshot.gameOver;
   state.overlayMessage = snapshot.overlayMessage;
-  dom.playerName.textContent = snapshot.playerName || dom.playerName.textContent;
-  dom.enemyName.textContent = snapshot.enemyName || dom.enemyName.textContent;
+  dom.playerName.textContent = isGuest ? (snapshot.enemyName || dom.playerName.textContent) : (snapshot.playerName || dom.playerName.textContent);
+  dom.enemyName.textContent = isGuest ? (snapshot.playerName || dom.enemyName.textContent) : (snapshot.enemyName || dom.enemyName.textContent);
 }
 
 function startOnlineMatch(snapshot) {
@@ -967,8 +966,13 @@ function startOnlineMatch(snapshot) {
     });
     broadcastMatchState(true);
   } else {
-    state.playerChoice = state.playerChoice || snapshot.playerChoice || { ...state.online.localChoice };
-    state.cpuChoice = state.cpuChoice || snapshot.cpuChoice || { ...state.online.remoteChoice };
+    if (state.online.role === 'guest') {
+      state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : (state.playerChoice || snapshot.cpuChoice);
+      state.cpuChoice = state.cpuChoice || snapshot.playerChoice || { ...state.online.remoteChoice };
+    } else {
+      state.playerChoice = state.playerChoice || snapshot.playerChoice || { ...state.online.localChoice };
+      state.cpuChoice = state.cpuChoice || snapshot.cpuChoice || { ...state.online.remoteChoice };
+    }
     startRound(false);
     applyMatchSnapshot(snapshot);
   }
