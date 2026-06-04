@@ -43,10 +43,10 @@ AssetsGame/
     idle.png
     walk.png
     jump.png
-    attack1.png
-    attack2.png
+    Attack_1.png
+    Attack_2.png
     hurt.png
-    ko.png
+    Dead..png
   Samurai/
     ...
   Shinobi/
