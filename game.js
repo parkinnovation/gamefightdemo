@@ -8,6 +8,7 @@ const ASSET_ROOT_CANDIDATES = ['/AssetsGame', 'AssetsGame', '/assets', 'assets']
 const FRAME_COUNT = 12;
 const ONLINE_CONNECTION_TIMEOUT_MS = 10000;
 const ONLINE_STATE_PUSH_INTERVAL_MS = 80;
+const ONLINE_API_POLL_INTERVAL_MS = 350;
 const ONLINE_WS_PATH = '/ws';
 
 const characters = [
@@ -35,10 +36,13 @@ const state = {
   online: {
     roomId: '',
     role: null,
+    transport: null,
     sessionId: '',
     socket: null,
     socketOpen: false,
     connectionTimeoutId: null,
+    pollIntervalId: null,
+    pollInFlight: false,
     connected: false,
     localChoice: null,
     remoteChoice: null,
@@ -46,6 +50,7 @@ const state = {
     localControls: null,
     remoteControls: null,
     lastStatePushAt: 0,
+    lastCommandId: 0,
     statePushInFlight: false,
     statePushDirty: false,
     pendingSnapshot: null
@@ -177,7 +182,15 @@ function createClientId() {
 }
 
 function canUseOnlineTransport() {
-  return window.location.protocol !== 'file:' && typeof window.WebSocket === 'function';
+  return window.location.protocol !== 'file:';
+}
+
+function isLocalDevelopmentHost() {
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+}
+
+function getPreferredOnlineTransport() {
+  return isLocalDevelopmentHost() && typeof window.WebSocket === 'function' ? 'ws' : 'api';
 }
 
 function getOnlineSocketUrl() {
@@ -185,10 +198,125 @@ function getOnlineSocketUrl() {
   return `${protocol}//${window.location.host}${ONLINE_WS_PATH}`;
 }
 
+function getOnlineApiUrl() {
+  return '/api/rooms';
+}
+
+function buildOnlineApiPayload(payload) {
+  const type = String(payload?.type || '');
+  if (type === 'create') return { action: 'create', choice: payload.choice || null };
+  if (type === 'join') return { action: 'join', roomId: payload.roomId, choice: payload.choice || null };
+  if (type === 'input') return { action: 'input', roomId: payload.roomId, sessionId: payload.sessionId, controls: { pressed: payload.pressed || {} } };
+  if (type === 'command') return { action: 'command', roomId: payload.roomId, sessionId: payload.sessionId, command: payload.command };
+  if (type === 'state') return { action: 'state', roomId: payload.roomId, sessionId: payload.sessionId, snapshot: payload.snapshot || null };
+  if (type === 'match-start') {
+    return {
+      action: 'match-start',
+      roomId: payload.roomId,
+      sessionId: payload.sessionId,
+      hostChoice: payload.hostChoice || null,
+      guestChoice: payload.guestChoice || null,
+      snapshot: payload.snapshot || null
+    };
+  }
+  if (type === 'match-end') return { action: 'match-end', roomId: payload.roomId, sessionId: payload.sessionId, snapshot: payload.snapshot || null };
+  if (type === 'close') return { action: 'close', roomId: payload.roomId, sessionId: payload.sessionId };
+  return null;
+}
+
+async function postOnlineAction(payload) {
+  const body = buildOnlineApiPayload(payload);
+  if (!body) return null;
+  const response = await fetch(getOnlineApiUrl(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || 'Falha na comunicacao com o servidor.');
+  }
+  return data;
+}
+
+async function fetchOnlineRoomState() {
+  if (!state.online.roomId || !state.online.role) return null;
+  const params = new URLSearchParams({
+    roomId: state.online.roomId,
+    role: state.online.role
+  });
+  if (state.online.role === 'host') {
+    params.set('since', String(state.online.lastCommandId || 0));
+  }
+  const response = await fetch(`${getOnlineApiUrl()}?${params.toString()}`, {
+    cache: 'no-store'
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || 'Falha na comunicacao com o servidor.');
+  }
+  return data.room || null;
+}
+
 function sendOnlineMessage(payload) {
+  if (state.online.transport === 'api') {
+    void postOnlineAction(payload)
+      .then((data) => {
+        const type = String(payload?.type || '');
+        if (type === 'create') {
+          setupOnlineSession(data.roomId || makeRoomCode(), 'host', data.sessionId || createClientId());
+          state.playerRoundWins = 0;
+          state.cpuRoundWins = 0;
+          state.round = 1;
+          state.gameOver = false;
+          state.running = false;
+          dom.roomCode.textContent = state.online.roomId;
+          dom.copyRoomCodeBtn.disabled = false;
+          setRoomStatus(`Sala ${state.online.roomId} criada. Aguardando outro jogador...`);
+          dom.startFightBtn.disabled = true;
+          dom.joinRoomBtn.disabled = true;
+          dom.roomCodeInput.value = '';
+          copyText(state.online.roomId);
+          return;
+        }
+        if (type === 'join') {
+          setupOnlineSession(String(payload.roomId || ''), 'guest', data.sessionId || createClientId());
+          state.cpuChoice = state.cpuChoice || { ...state.online.localChoice };
+          setRoomStatus(`Conectando na sala ${state.online.roomId}...`);
+          dom.roomCode.textContent = state.online.roomId;
+          dom.copyRoomCodeBtn.disabled = false;
+          dom.startFightBtn.disabled = true;
+          dom.joinRoomBtn.disabled = true;
+        }
+      })
+      .catch((error) => {
+        if (state.mode === 'online') {
+          if (!state.online.roomId && ['create', 'join'].includes(String(payload?.type || ''))) {
+            dom.startFightBtn.disabled = !state.selectedCharacterId;
+            dom.joinRoomBtn.disabled = false;
+          }
+          setRoomStatus(error?.message || 'Nao foi possivel comunicar com o servidor.');
+        }
+      });
+    return true;
+  }
   if (!state.online.socket || state.online.socket.readyState !== WebSocket.OPEN) return false;
   state.online.socket.send(JSON.stringify(payload));
   return true;
+}
+
+function handleOnlineDisconnect(message) {
+  if (state.mode !== 'online') return;
+  state.running = false;
+  clearInterval(timerInterval);
+  closeOnlineTransport();
+  refreshModeUi();
+  dom.fightScreen.classList.remove('active');
+  dom.selectScreen.classList.add('active');
+  dom.startFightBtn.disabled = !state.selectedCharacterId;
+  setRoomStatus(message);
 }
 
 function handleOnlineMessage(payload) {
@@ -278,12 +406,15 @@ function handleOnlineMessage(payload) {
     return;
   }
   if (payload.type === 'room-closed') {
-    setRoomStatus(payload.reason || 'A sala foi encerrada.');
-    closeOnlineTransport();
+    handleOnlineDisconnect(payload.reason || 'A sala foi encerrada.');
   }
 }
 
 function ensureOnlineSocket() {
+  state.online.transport = getPreferredOnlineTransport();
+  if (state.online.transport === 'api') {
+    return Promise.resolve();
+  }
   if (state.online.socket && (state.online.socket.readyState === WebSocket.OPEN || state.online.socket.readyState === WebSocket.CONNECTING)) {
     return Promise.resolve();
   }
@@ -307,19 +438,9 @@ function ensureOnlineSocket() {
         if (!state.online.socketOpen) reject(new Error('Nao foi possivel conectar no servidor WebSocket.'));
       };
       socket.onclose = () => {
-        const wasOnline = state.online.roomId || state.online.role;
         state.online.socket = null;
         state.online.socketOpen = false;
-        if (wasOnline && state.mode === 'online') {
-          state.running = false;
-          clearInterval(timerInterval);
-          closeOnlineTransport(false);
-          refreshModeUi();
-          dom.fightScreen.classList.remove('active');
-          dom.selectScreen.classList.add('active');
-          dom.startFightBtn.disabled = !state.selectedCharacterId;
-          setRoomStatus('Conexao encerrada com o servidor.');
-        }
+        handleOnlineDisconnect('Conexao encerrada com o servidor.');
       };
     } catch {
       reject(new Error('Nao foi possivel conectar no servidor WebSocket.'));
@@ -644,14 +765,20 @@ function setupOnlineSession(roomId, role, sessionId) {
     clearTimeout(state.online.connectionTimeoutId);
     state.online.connectionTimeoutId = null;
   }
+  if (state.online.pollIntervalId) {
+    clearInterval(state.online.pollIntervalId);
+    state.online.pollIntervalId = null;
+  }
   state.online.roomId = roomId;
   state.online.role = role;
   state.online.sessionId = sessionId;
+  state.online.transport = state.online.transport || getPreferredOnlineTransport();
   state.online.connected = false;
   state.online.localControls = createControlState();
   state.online.remoteControls = createControlState();
   state.online.latestSnapshot = null;
   state.online.lastStatePushAt = 0;
+  state.online.lastCommandId = 0;
   state.online.connectionTimeoutId = window.setTimeout(() => {
     if (state.online.roomId !== roomId || state.online.role !== role || state.online.connected) return;
     closeOnlineTransport();
@@ -663,17 +790,29 @@ function setupOnlineSession(roomId, role, sessionId) {
         : `Nao recebi resposta da sala ${roomId} em tempo.`
     );
   }, ONLINE_CONNECTION_TIMEOUT_MS);
+  if (state.online.transport === 'api') {
+    state.online.pollIntervalId = window.setInterval(() => {
+      void pollOnlineRoom();
+    }, ONLINE_API_POLL_INTERVAL_MS);
+    void pollOnlineRoom();
+  }
 }
 
 function closeOnlineTransport(closeSocket = true) {
   if (state.online.connectionTimeoutId) {
     clearTimeout(state.online.connectionTimeoutId);
   }
+  if (state.online.pollIntervalId) {
+    clearInterval(state.online.pollIntervalId);
+  }
   if (closeSocket && state.online.socket) {
     state.online.socket.close();
   }
   state.online.socket = closeSocket ? null : state.online.socket;
   state.online.socketOpen = closeSocket ? false : state.online.socketOpen;
+  state.online.pollIntervalId = null;
+  state.online.pollInFlight = false;
+  state.online.transport = null;
   state.online.sessionId = '';
   state.online.connectionTimeoutId = null;
   state.online.roomId = '';
@@ -685,9 +824,69 @@ function closeOnlineTransport(closeSocket = true) {
   state.online.localControls = null;
   state.online.remoteControls = null;
   state.online.lastStatePushAt = 0;
+  state.online.lastCommandId = 0;
   state.online.statePushInFlight = false;
   state.online.statePushDirty = false;
   state.online.pendingSnapshot = null;
+}
+
+async function pollOnlineRoom() {
+  if (state.online.transport !== 'api' || state.online.pollInFlight || !state.online.roomId || !state.online.role) return;
+  state.online.pollInFlight = true;
+  try {
+    const room = await fetchOnlineRoomState();
+    if (!room) return;
+    if (room.closed) {
+      handleOnlineDisconnect('A sala foi encerrada.');
+      return;
+    }
+    if (state.online.role === 'host') {
+      state.online.remoteControls.pressed = room.guestControls?.pressed || {};
+      for (const command of room.newCommands || []) {
+        if (command?.id > state.online.lastCommandId) {
+          state.online.lastCommandId = command.id;
+        }
+        if (command?.command === 'jump') state.online.remoteControls.jumpQueued = true;
+        if (command?.command === 'attack1') state.online.remoteControls.attack1Queued = true;
+        if (command?.command === 'attack2') state.online.remoteControls.attack2Queued = true;
+      }
+      if (room.guestChoice && !state.online.connected) {
+        state.online.remoteChoice = { ...room.guestChoice };
+        state.cpuChoice = { ...room.guestChoice };
+        state.online.connected = true;
+        if (state.online.connectionTimeoutId) {
+          clearTimeout(state.online.connectionTimeoutId);
+          state.online.connectionTimeoutId = null;
+        }
+        setRoomStatus(`Oponente conectado: ${state.cpuChoice?.name || 'Convidado'}. Iniciando partida...`);
+        state.overlayMessage = 'OPONENTE CONECTADO';
+        startOnlineMatch();
+      }
+      return;
+    }
+    if (room.hostChoice && !state.playerChoice) {
+      state.playerChoice = { ...room.hostChoice };
+    }
+    if (room.guestChoice && !state.cpuChoice) {
+      state.cpuChoice = { ...room.guestChoice };
+    }
+    if (room.matchStarted && room.latestSnapshot && !state.running) {
+      startOnlineMatch(room.latestSnapshot);
+      return;
+    }
+    if (room.matchStarted && !room.latestSnapshot) {
+      return;
+    }
+    if (state.running && room.latestSnapshot) {
+      applyMatchSnapshot(room.latestSnapshot);
+    }
+  } catch (error) {
+    if (state.mode === 'online') {
+      handleOnlineDisconnect(error?.message || 'Conexao encerrada com o servidor.');
+    }
+  } finally {
+    state.online.pollInFlight = false;
+  }
 }
 
 function buildMatchSnapshot() {
@@ -711,9 +910,20 @@ function buildMatchSnapshot() {
 function broadcastMatchState(force = false) {
   if (state.mode !== 'online' || state.online.role !== 'host' || !state.online.roomId) return;
   const now = Date.now();
-  if (!force && now - state.online.lastStatePushAt < ONLINE_STATE_PUSH_INTERVAL_MS) return;
+  const statePushInterval = state.online.transport === 'api' ? 250 : ONLINE_STATE_PUSH_INTERVAL_MS;
+  if (!force && now - state.online.lastStatePushAt < statePushInterval) return;
   state.online.lastStatePushAt = now;
   const snapshot = buildMatchSnapshot();
+  if (state.online.transport === 'api') {
+    void postOnlineAction({
+      type: 'state',
+      roomId: state.online.roomId,
+      role: state.online.role,
+      sessionId: state.online.sessionId,
+      snapshot
+    }).catch(() => {});
+    return;
+  }
   if (state.online.statePushInFlight) {
     state.online.statePushDirty = true;
     state.online.pendingSnapshot = snapshot;
@@ -1019,7 +1229,7 @@ async function beginFight() {
     return;
   }
   if (!canUseOnlineTransport()) {
-    setRoomStatus('Multiplayer exige HTTP/HTTPS e backend ativo. Nao funciona em file://.');
+    setRoomStatus('Multiplayer exige HTTP/HTTPS.');
     return;
   }
   state.online.localChoice = { ...selected };
@@ -1070,7 +1280,7 @@ async function joinOnlineRoom() {
   const selected = characters.find((c) => c.id === state.selectedCharacterId);
   if (!roomId || !selected || state.mode !== 'online' || state.running || state.online.roomId || state.online.role) return;
   if (!canUseOnlineTransport()) {
-    setRoomStatus('Multiplayer exige HTTP/HTTPS e backend ativo. Nao funciona em file://.');
+    setRoomStatus('Multiplayer exige HTTP/HTTPS.');
     return;
   }
   state.online.localChoice = { ...selected };
