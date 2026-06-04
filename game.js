@@ -25,9 +25,21 @@ const ACTION_ASSET_CANDIDATES = {
 };
 
 const state = {
+  mode: 'cpu',
   selectedCharacterId: null,
   playerChoice: null,
   cpuChoice: null,
+  online: {
+    roomId: '',
+    role: null,
+    channel: null,
+    connected: false,
+    localChoice: null,
+    remoteChoice: null,
+    latestSnapshot: null,
+    localControls: null,
+    remoteControls: null
+  },
   running: false,
   round: 1,
   timer: ROUND_TIME,
@@ -36,14 +48,27 @@ const state = {
   roundOver: false,
   gameOver: false,
   overlayMessage: '',
-  keyState: {}
+  localControls: {
+    pressed: {},
+    jumpQueued: false,
+    attack1Queued: false,
+    attack2Queued: false
+  }
 };
 
 const dom = {
   selectScreen: document.getElementById('character-select'),
   fightScreen: document.getElementById('fight-screen'),
+  modeCpuBtn: document.getElementById('mode-cpu'),
+  modeOnlineBtn: document.getElementById('mode-online'),
+  onlinePanel: document.getElementById('online-panel'),
   characterGrid: document.getElementById('character-grid'),
   startFightBtn: document.getElementById('start-fight'),
+  joinRoomBtn: document.getElementById('join-room'),
+  roomCodeInput: document.getElementById('room-code-input'),
+  roomStatus: document.getElementById('room-status'),
+  roomCode: document.getElementById('room-code'),
+  copyRoomCodeBtn: document.getElementById('copy-room-code'),
   backSelectBtn: document.getElementById('back-select'),
   playerName: document.getElementById('player-name'),
   enemyName: document.getElementById('enemy-name'),
@@ -61,6 +86,107 @@ const ctx = dom.canvas.getContext('2d');
 let player;
 let cpu;
 let timerInterval;
+
+function createControlState() {
+  return {
+    pressed: {},
+    jumpQueued: false,
+    attack1Queued: false,
+    attack2Queued: false
+  };
+}
+
+function clearControlState(controlState) {
+  controlState.pressed = {};
+  controlState.jumpQueued = false;
+  controlState.attack1Queued = false;
+  controlState.attack2Queued = false;
+}
+
+function makeRoomCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+}
+
+function applyControlStateToFighter(fighter, controlState) {
+  if (!fighter || !controlState) return;
+  let vx = 0;
+  if (controlState.pressed.KeyA) vx -= fighter.speed;
+  if (controlState.pressed.KeyD) vx += fighter.speed;
+  fighter.vx = fighter.canAct() ? vx : 0;
+  if (controlState.jumpQueued) {
+    fighter.jump();
+    controlState.jumpQueued = false;
+  }
+  if (controlState.attack1Queued) {
+    fighter.attack('attack1');
+    controlState.attack1Queued = false;
+  }
+  if (controlState.attack2Queued) {
+    fighter.attack('attack2');
+    controlState.attack2Queued = false;
+  }
+}
+
+function serializeFighter(fighter) {
+  return {
+    x: fighter.x,
+    y: fighter.y,
+    vx: fighter.vx,
+    vy: fighter.vy,
+    hp: fighter.hp,
+    attackCooldown: fighter.attackCooldown,
+    attackTime: fighter.attackTime,
+    attackKind: fighter.attackKind,
+    hurtTime: fighter.hurtTime,
+    ko: fighter.ko,
+    frameTick: fighter.frameTick,
+    frameIndex: fighter.frameIndex,
+    currentAction: fighter.currentAction,
+    faceRight: fighter.faceRight
+  };
+}
+
+function applyFighterSnapshot(fighter, snapshot) {
+  if (!fighter || !snapshot) return;
+  Object.assign(fighter, snapshot);
+}
+
+function setRoomStatus(message) {
+  if (dom.roomStatus) dom.roomStatus.textContent = message;
+}
+
+function updateControlState(controlState, code, isDown) {
+  if (!controlState) return;
+  if (code === 'KeyA' || code === 'KeyD') {
+    controlState.pressed[code] = isDown;
+  }
+  if (isDown && code === 'KeyW') {
+    controlState.jumpQueued = true;
+  }
+  if (isDown && code === 'KeyJ') {
+    controlState.attack1Queued = true;
+  }
+  if (isDown && code === 'KeyK') {
+    controlState.attack2Queued = true;
+  }
+}
+
+function sendLocalInput() {
+  if (state.mode !== 'online' || state.online.role !== 'guest') return;
+  const payload = {
+    pressed: { ...state.localControls.pressed }
+  };
+  sendOnlineMessage({
+    type: 'input',
+    controls: payload
+  });
+}
 
 function getAssetCandidates(folder, fileName) {
   return ASSET_ROOT_CANDIDATES.map((root) => `${root}/${folder}/${fileName}`);
@@ -143,12 +269,44 @@ function buildCharacterSelect() {
 
   dom.characterGrid.querySelectorAll('.character-card').forEach((card) => {
     card.addEventListener('click', () => {
+      if (state.mode === 'online' && (state.online.roomId || state.running)) return;
       dom.characterGrid.querySelectorAll('.character-card').forEach((c) => c.classList.remove('selected'));
       card.classList.add('selected');
       state.selectedCharacterId = card.dataset.charId;
       dom.startFightBtn.disabled = false;
     });
   });
+}
+
+function refreshModeUi() {
+  const onlineMode = state.mode === 'online';
+  dom.modeCpuBtn.classList.toggle('active', !onlineMode);
+  dom.modeOnlineBtn.classList.toggle('active', onlineMode);
+  dom.onlinePanel.classList.toggle('hidden', !onlineMode);
+  dom.startFightBtn.textContent = onlineMode ? 'Criar sala' : 'Iniciar Luta';
+  dom.joinRoomBtn.disabled = !onlineMode;
+  dom.copyRoomCodeBtn.disabled = !state.online.roomId;
+  if (!state.online.roomId) {
+    dom.roomCode.textContent = '-';
+    dom.roomCodeInput.value = '';
+  }
+  if (!onlineMode) {
+    setRoomStatus('Escolha um lutador e crie uma sala, ou entre em uma sala existente.');
+    dom.copyRoomCodeBtn.disabled = true;
+  }
+}
+
+function setMode(mode) {
+  if (state.mode === mode) return;
+  closeOnlineTransport();
+  state.mode = mode;
+  state.selectedCharacterId = null;
+  dom.characterGrid.querySelectorAll('.character-card').forEach((card) => card.classList.remove('selected'));
+  dom.startFightBtn.disabled = true;
+  refreshModeUi();
+  if (mode === 'online') {
+    setRoomStatus('Escolha um lutador e crie uma sala, ou entre em uma sala existente.');
+  }
 }
 
 function createSpriteSet(folder) {
@@ -315,6 +473,135 @@ class Fighter {
   }
 }
 
+function setupOnlineTransport(roomId, role) {
+  closeOnlineTransport();
+  state.online.roomId = roomId;
+  state.online.role = role;
+  state.online.connected = false;
+  state.online.localControls = createControlState();
+  state.online.remoteControls = createControlState();
+  state.online.latestSnapshot = null;
+  const channelName = `gamefight-room-${roomId}`;
+  state.online.channel = new BroadcastChannel(channelName);
+  state.online.channel.onmessage = (event) => {
+    const data = event.data || {};
+    if (data.roomId !== state.online.roomId) return;
+    if (data.type === 'join-request' && state.online.role === 'host') {
+      state.online.remoteChoice = data.choice;
+      state.cpuChoice = { ...data.choice };
+      state.online.connected = true;
+      state.online.roomId = roomId;
+      setRoomStatus(`Oponente conectado: ${data.choice.name}. Iniciando partida...`);
+      state.overlayMessage = 'OPONENTE CONECTADO';
+      setTimeout(() => startOnlineMatch(), 900);
+      return;
+    }
+    if (data.type === 'input' && state.online.role === 'host') {
+      state.online.remoteControls.pressed = data.controls?.pressed || {};
+      return;
+    }
+    if (data.type === 'command' && state.online.role === 'host') {
+      if (data.command === 'jump') state.online.remoteControls.jumpQueued = true;
+      if (data.command === 'attack1') state.online.remoteControls.attack1Queued = true;
+      if (data.command === 'attack2') state.online.remoteControls.attack2Queued = true;
+      return;
+    }
+    if (data.type === 'match-start' && state.online.role === 'guest') {
+      state.playerChoice = { ...data.hostChoice };
+      state.cpuChoice = { ...data.guestChoice };
+      state.online.connected = true;
+      state.online.latestSnapshot = data.snapshot || null;
+      startOnlineMatch(data.snapshot);
+      return;
+    }
+    if (data.type === 'state' && state.online.role === 'guest') {
+      state.online.latestSnapshot = data.snapshot || null;
+      return;
+    }
+    if (data.type === 'match-end' && state.online.role === 'guest') {
+      state.online.latestSnapshot = data.snapshot || null;
+    }
+  };
+}
+
+function closeOnlineTransport() {
+  if (state.online.channel) {
+    state.online.channel.close();
+  }
+  state.online.channel = null;
+  state.online.roomId = '';
+  state.online.role = null;
+  state.online.connected = false;
+  state.online.localChoice = null;
+  state.online.remoteChoice = null;
+  state.online.latestSnapshot = null;
+  state.online.localControls = null;
+  state.online.remoteControls = null;
+}
+
+function sendOnlineMessage(message) {
+  if (!state.online.channel || !state.online.roomId) return;
+  state.online.channel.postMessage({ roomId: state.online.roomId, ...message });
+}
+
+function broadcastMatchState() {
+  if (state.mode !== 'online' || state.online.role !== 'host') return;
+  sendOnlineMessage({
+    type: 'state',
+    snapshot: {
+      player: serializeFighter(player),
+      cpu: serializeFighter(cpu),
+      round: state.round,
+      timer: state.timer,
+      playerRoundWins: state.playerRoundWins,
+      cpuRoundWins: state.cpuRoundWins,
+      roundOver: state.roundOver,
+      gameOver: state.gameOver,
+      overlayMessage: state.overlayMessage,
+      playerName: state.playerChoice?.name || 'JOGADOR 1',
+      enemyName: state.cpuChoice?.name || 'JOGADOR 2'
+    }
+  });
+}
+
+function applyMatchSnapshot(snapshot) {
+  if (!snapshot) return;
+  applyFighterSnapshot(player, snapshot.player);
+  applyFighterSnapshot(cpu, snapshot.cpu);
+  state.round = snapshot.round;
+  state.timer = snapshot.timer;
+  state.playerRoundWins = snapshot.playerRoundWins;
+  state.cpuRoundWins = snapshot.cpuRoundWins;
+  state.roundOver = snapshot.roundOver;
+  state.gameOver = snapshot.gameOver;
+  state.overlayMessage = snapshot.overlayMessage;
+  dom.playerName.textContent = snapshot.playerName || dom.playerName.textContent;
+  dom.enemyName.textContent = snapshot.enemyName || dom.enemyName.textContent;
+}
+
+function startOnlineMatch(snapshot) {
+  state.running = true;
+  state.roundOver = false;
+  state.gameOver = false;
+  if (!snapshot) {
+    state.playerChoice = state.playerChoice || { ...state.online.localChoice };
+    state.cpuChoice = state.cpuChoice || { ...state.online.remoteChoice };
+    if (!state.playerChoice || !state.cpuChoice) return;
+    startRound(true);
+    broadcastMatchState();
+  } else {
+    startRound(false);
+    applyMatchSnapshot(snapshot);
+  }
+  dom.selectScreen.classList.remove('active');
+  dom.fightScreen.classList.add('active');
+  if (state.online.role === 'host') {
+    requestAnimationFrame(tick);
+  } else {
+    requestAnimationFrame(tick);
+  }
+}
+
 function intersects(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
@@ -342,17 +629,12 @@ function updateFacing() {
 
 function applyPlayerInput() {
   if (!state.running || state.roundOver || state.gameOver) return;
-  let vx = 0;
-  if (state.keyState.KeyA) vx -= player.speed;
-  if (state.keyState.KeyD) vx += player.speed;
-  player.vx = player.canAct() ? vx : 0;
-  if (state.keyState.KeyW) {
-    player.jump();
-    state.keyState.KeyW = false;
-  }
+  const controls = state.mode === 'online' ? state.online.localControls : state.localControls;
+  applyControlStateToFighter(player, controls);
 }
 
 function cpuAI() {
+  if (state.mode === 'online') return;
   if (!state.running || state.roundOver || state.gameOver || cpu.ko) return;
   const dist = player.x - cpu.x;
   const absDist = Math.abs(dist);
@@ -368,6 +650,7 @@ function cpuAI() {
 }
 
 function resolveAttacks() {
+  if (state.mode === 'online' && state.online.role === 'guest') return;
   const pAtk = player.attackBox();
   const cAtk = cpu.attackBox();
   if (pAtk && player.attackTime >= 10 && intersects(pAtk, cpu.hitbox) && cpu.hurtTime <= 0) {
@@ -398,6 +681,7 @@ function refreshHud() {
 }
 
 function updateRoundState() {
+  if (state.mode === 'online' && state.online.role === 'guest') return;
   if (state.roundOver || state.gameOver) return;
   if (player.hp <= 0 || cpu.hp <= 0 || state.timer <= 0) {
     state.roundOver = true;
@@ -411,10 +695,28 @@ function updateRoundState() {
       state.gameOver = true;
       state.overlayMessage = state.playerRoundWins > state.cpuRoundWins ? 'VITORIA!' : 'DERROTA!';
       clearInterval(timerInterval);
+      broadcastMatchState();
+      sendOnlineMessage({
+        type: 'match-end',
+        snapshot: {
+          player: serializeFighter(player),
+          cpu: serializeFighter(cpu),
+          round: state.round,
+          timer: state.timer,
+          playerRoundWins: state.playerRoundWins,
+          cpuRoundWins: state.cpuRoundWins,
+          roundOver: state.roundOver,
+          gameOver: state.gameOver,
+          overlayMessage: state.overlayMessage,
+          playerName: state.playerChoice?.name || 'JOGADOR 1',
+          enemyName: state.cpuChoice?.name || 'JOGADOR 2'
+        }
+      });
       return;
     }
     state.overlayMessage = winner === 'draw' ? 'EMPATE' : winner === 'player' ? 'ROUND DO PLAYER' : 'ROUND DA CPU';
     clearInterval(timerInterval);
+    broadcastMatchState();
     setTimeout(() => {
       state.round += 1;
       startRound(false);
@@ -424,6 +726,17 @@ function updateRoundState() {
 
 function tick() {
   if (!state.running) return;
+  if (state.mode === 'online' && state.online.role === 'guest') {
+    drawArena();
+    if (state.online.latestSnapshot) {
+      applyMatchSnapshot(state.online.latestSnapshot);
+    }
+    player.draw();
+    cpu.draw();
+    refreshHud();
+    requestAnimationFrame(tick);
+    return;
+  }
   drawArena();
   applyPlayerInput();
   cpuAI();
@@ -437,10 +750,14 @@ function tick() {
   cpu.draw();
   updateRoundState();
   refreshHud();
+  if (state.mode === 'online') {
+    broadcastMatchState();
+  }
   requestAnimationFrame(tick);
 }
 
 function startTimer() {
+  if (state.mode === 'online' && state.online.role === 'guest') return;
   clearInterval(timerInterval);
   timerInterval = setInterval(() => {
     if (!state.roundOver && !state.gameOver && state.timer > 0) state.timer -= 1;
@@ -467,7 +784,7 @@ function startRound(showIntro = true) {
     faceRight: false
   });
   dom.playerName.textContent = state.playerChoice.name;
-  dom.enemyName.textContent = `${state.cpuChoice.name} (CPU)`;
+  dom.enemyName.textContent = state.mode === 'cpu' ? `${state.cpuChoice.name} (CPU)` : state.cpuChoice.name;
   if (showIntro) {
     state.overlayMessage = 'READY?';
     setTimeout(() => {
@@ -482,54 +799,122 @@ function startRound(showIntro = true) {
       state.overlayMessage = '';
     }, 700);
   }
-  startTimer();
+  if (state.mode === 'cpu' || state.online.role === 'host') {
+    startTimer();
+  }
+  if (state.mode === 'online' && state.online.role === 'host') {
+    broadcastMatchState();
+  }
 }
 
 function beginFight() {
   const selected = characters.find((c) => c.id === state.selectedCharacterId);
   if (!selected) return;
-  const cpuPool = characters.filter((c) => c.id !== selected.id);
-  const cpuSelected = cpuPool[Math.floor(Math.random() * cpuPool.length)];
+  if (state.mode === 'cpu') {
+    const cpuPool = characters.filter((c) => c.id !== selected.id);
+    const cpuSelected = cpuPool[Math.floor(Math.random() * cpuPool.length)];
+    state.playerChoice = { ...selected };
+    state.cpuChoice = { ...cpuSelected };
+    state.playerRoundWins = 0;
+    state.cpuRoundWins = 0;
+    state.round = 1;
+    state.gameOver = false;
+    state.running = true;
+    dom.selectScreen.classList.remove('active');
+    dom.fightScreen.classList.add('active');
+    startRound(true);
+    requestAnimationFrame(tick);
+    return;
+  }
+  if (state.running || state.online.roomId || state.online.role) {
+    return;
+  }
+  state.online.localChoice = { ...selected };
+  const roomId = makeRoomCode();
+  setupOnlineTransport(roomId, 'host');
   state.playerChoice = { ...selected };
-  state.cpuChoice = { ...cpuSelected };
   state.playerRoundWins = 0;
   state.cpuRoundWins = 0;
   state.round = 1;
   state.gameOver = false;
-  state.running = true;
-  dom.selectScreen.classList.remove('active');
-  dom.fightScreen.classList.add('active');
-  startRound(true);
-  requestAnimationFrame(tick);
+  state.running = false;
+  dom.roomCode.textContent = roomId;
+  dom.copyRoomCodeBtn.disabled = false;
+  setRoomStatus(`Sala ${roomId} criada. Aguardando outro jogador...`);
+  dom.startFightBtn.disabled = true;
+  dom.joinRoomBtn.disabled = true;
+  dom.roomCodeInput.value = '';
+  copyText(roomId);
 }
 
 function resetToSelect() {
   state.running = false;
   clearInterval(timerInterval);
-  state.keyState = {};
+  state.localControls = {
+    pressed: {},
+    jumpQueued: false,
+    attack1Queued: false,
+    attack2Queued: false
+  };
+  clearControlState(state.online.localControls || createControlState());
+  clearControlState(state.online.remoteControls || createControlState());
   state.overlayMessage = '';
+  closeOnlineTransport();
+  refreshModeUi();
   dom.fightScreen.classList.remove('active');
   dom.selectScreen.classList.add('active');
+  dom.startFightBtn.disabled = !state.selectedCharacterId;
+}
+
+function joinOnlineRoom() {
+  const roomId = dom.roomCodeInput.value.trim().toUpperCase();
+  const selected = characters.find((c) => c.id === state.selectedCharacterId);
+  if (!roomId || !selected || state.mode !== 'online' || state.running || state.online.roomId || state.online.role) return;
+  state.online.localChoice = { ...selected };
+  setupOnlineTransport(roomId, 'guest');
+  setRoomStatus(`Conectando na sala ${roomId}...`);
+  dom.roomCode.textContent = roomId;
+  dom.copyRoomCodeBtn.disabled = false;
+  sendOnlineMessage({
+    type: 'join-request',
+    choice: state.online.localChoice
+  });
+  dom.startFightBtn.disabled = true;
+  dom.joinRoomBtn.disabled = true;
 }
 
 window.addEventListener('keydown', (event) => {
   if (!state.running || state.roundOver || state.gameOver) return;
-  state.keyState[event.code] = true;
-  if (event.code === 'KeyJ') {
-    event.preventDefault();
-    player.attack('attack1');
+  if (state.mode === 'online' && state.online.role === 'guest') {
+    updateControlState(state.localControls, event.code, true);
+    if (event.code === 'KeyW' || event.code === 'KeyJ' || event.code === 'KeyK') event.preventDefault();
+    if (event.code === 'KeyW') sendOnlineMessage({ type: 'command', command: 'jump' });
+    if (event.code === 'KeyJ') sendOnlineMessage({ type: 'command', command: 'attack1' });
+    if (event.code === 'KeyK') sendOnlineMessage({ type: 'command', command: 'attack2' });
+    sendLocalInput();
+    return;
   }
-  if (event.code === 'KeyK') {
-    event.preventDefault();
-    player.attack('attack2');
-  }
+  updateControlState(state.localControls, event.code, true);
+  if (event.code === 'KeyW' || event.code === 'KeyJ' || event.code === 'KeyK') event.preventDefault();
 });
 
 window.addEventListener('keyup', (event) => {
-  state.keyState[event.code] = false;
+  updateControlState(state.localControls, event.code, false);
+  if (state.mode === 'online' && state.online.role === 'guest') {
+    sendLocalInput();
+  }
 });
 
+dom.modeCpuBtn.addEventListener('click', () => setMode('cpu'));
+dom.modeOnlineBtn.addEventListener('click', () => setMode('online'));
 dom.startFightBtn.addEventListener('click', beginFight);
+dom.joinRoomBtn.addEventListener('click', joinOnlineRoom);
 dom.backSelectBtn.addEventListener('click', resetToSelect);
+dom.copyRoomCodeBtn.addEventListener('click', () => {
+  if (dom.roomCode.textContent && dom.roomCode.textContent !== '-') {
+    copyText(dom.roomCode.textContent);
+  }
+});
 
 buildCharacterSelect();
+refreshModeUi();
