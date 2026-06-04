@@ -38,6 +38,7 @@ const state = {
     roomId: '',
     role: null,
     transport: null,
+    apiAvailable: null,
     sessionId: '',
     socket: null,
     socketOpen: false,
@@ -191,13 +192,34 @@ function getPreferredOnlineTransport() {
   return typeof window.WebSocket === 'function' ? 'ws' : 'api';
 }
 
+function getOnlineApiBaseUrl() {
+  const configuredBaseUrl = String(
+    window.__GAMEFIGHT_API_BASE_URL__
+    || document.querySelector('meta[name="gamefight-api-base"]')?.content
+    || ''
+  ).trim().replace(/\/+$/, '');
+  return configuredBaseUrl;
+}
+
 function getOnlineSocketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}${ONLINE_WS_PATH}`;
 }
 
 function getOnlineApiUrl() {
-  return '/api/rooms';
+  const baseUrl = getOnlineApiBaseUrl();
+  return baseUrl ? `${baseUrl}/api/rooms` : '/api/rooms';
+}
+
+async function probeOnlineApi() {
+  if (state.online.apiAvailable !== null) return state.online.apiAvailable;
+  try {
+    const response = await fetch(getOnlineApiUrl(), { cache: 'no-store' });
+    state.online.apiAvailable = response.status !== 404;
+  } catch {
+    state.online.apiAvailable = false;
+  }
+  return state.online.apiAvailable;
 }
 
 function buildOnlineApiPayload(payload) {
@@ -226,6 +248,9 @@ function buildOnlineApiPayload(payload) {
 async function postOnlineAction(payload) {
   const body = buildOnlineApiPayload(payload);
   if (!body) return null;
+  if (state.online.apiAvailable === false) {
+    throw new Error('O modo online nao esta disponivel neste deploy.');
+  }
   const response = await fetch(getOnlineApiUrl(), {
     method: 'POST',
     headers: {
@@ -234,6 +259,14 @@ async function postOnlineAction(payload) {
     body: JSON.stringify(body)
   });
   const data = await response.json().catch(() => ({}));
+  if (response.status === 404) {
+    state.online.apiAvailable = false;
+    if (state.mode === 'online' && payload.type !== 'close') {
+      setTimeout(() => {
+        handleOnlineDisconnect('O modo online nao esta disponivel neste deploy.');
+      }, 0);
+    }
+  }
   if (!response.ok || data.ok === false) {
     throw new Error(data.error || 'Falha na comunicacao com o servidor.');
   }
@@ -264,6 +297,7 @@ async function fetchOnlineRoomState() {
 
 function sendOnlineMessage(payload) {
   if (state.online.transport === 'api') {
+    if (state.online.apiAvailable === false) return false;
     void postOnlineAction(payload).catch(() => {});
     return true;
   }
@@ -483,6 +517,9 @@ function getActionCandidates(action) {
 
 function getActionFileNameCandidates(name) {
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
+  if (name === 'attack1') return ['Attack_1.png', 'Attack1.png', `${capitalized}.png`];
+  if (name === 'attack2') return ['Attack_2.png', 'Attack2.png', `${capitalized}.png`];
+  if (name === 'dead') return ['Dead..png', 'Dead.png', `${capitalized}.png`];
   return [`${capitalized}.png`];
 }
 
@@ -751,6 +788,7 @@ function setupOnlineSession(roomId, role, sessionId) {
   state.online.localControls = createControlState();
   state.online.remoteControls = createControlState();
   state.online.latestSnapshot = null;
+  state.online.apiAvailable = null;
   state.online.lastStatePushAt = 0;
   state.online.lastInputPushAt = 0;
   state.online.lastCommandId = 0;
@@ -793,6 +831,7 @@ function closeOnlineTransport(closeSocket = true) {
   state.online.statePushDirty = false;
   state.online.pendingSnapshot = null;
   state.online.lastInputPushAt = 0;
+  state.online.apiAvailable = null;
 }
 
 async function pollOnlineRoom() {
@@ -1212,6 +1251,10 @@ async function beginFight() {
   state.online.transport = getPreferredOnlineTransport();
   try {
     if (state.online.transport === 'api') {
+      const apiAvailable = await probeOnlineApi();
+      if (!apiAvailable) {
+        throw new Error('O modo online nao esta disponivel neste deploy.');
+      }
       const response = await postOnlineAction({
         type: 'play',
         choice: state.online.localChoice
