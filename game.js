@@ -8,9 +8,9 @@ const ASSET_ROOT_CANDIDATES = ['assets', 'ASSETSGAME', 'AssetsGame'];
 const FRAME_COUNT = 12;
 
 const characters = [
-  { id: 'char1', name: 'Lutador 1', folder: 'character1', color: '#38bdf8' },
-  { id: 'char2', name: 'Lutador 2', folder: 'character2', color: '#fb7185' },
-  { id: 'char3', name: 'Lutador 3', folder: 'character3', color: '#facc15' }
+  { id: 'fighter', name: 'Fighter', folder: 'Fighter', color: '#38bdf8' },
+  { id: 'samurai', name: 'Samurai', folder: 'Samurai', color: '#fb7185' },
+  { id: 'shinobi', name: 'Shinobi', folder: 'Shinobi', color: '#facc15' }
 ];
 
 const ACTIONS = ['idle', 'walk', 'jump', 'attack1', 'attack2', 'hurt', 'ko'];
