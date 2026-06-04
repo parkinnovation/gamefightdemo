@@ -589,6 +589,24 @@ function startOnlineMatch(snapshot) {
     if (!state.playerChoice || !state.cpuChoice) return;
     startRound(true);
     broadcastMatchState();
+    sendOnlineMessage({
+      type: 'match-start',
+      hostChoice: state.playerChoice,
+      guestChoice: state.cpuChoice,
+      snapshot: {
+        player: serializeFighter(player),
+        cpu: serializeFighter(cpu),
+        round: state.round,
+        timer: state.timer,
+        playerRoundWins: state.playerRoundWins,
+        cpuRoundWins: state.cpuRoundWins,
+        roundOver: state.roundOver,
+        gameOver: state.gameOver,
+        overlayMessage: state.overlayMessage,
+        playerName: state.playerChoice?.name || 'JOGADOR 1',
+        enemyName: state.cpuChoice?.name || 'JOGADOR 2'
+      }
+    });
   } else {
     startRound(false);
     applyMatchSnapshot(snapshot);
