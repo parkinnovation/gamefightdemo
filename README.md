@@ -13,7 +13,7 @@ Coloque os assets nestas pastas. O jogo tenta automaticamente `assets/`, `ASSETS
 
 ```text
 ASSETSGAME/
-  character1/
+  Fighter/
     idle.png
     walk.png
     jump.png
@@ -21,9 +21,9 @@ ASSETSGAME/
     attack2.png
     hurt.png
     ko.png
-  character2/
+  Samurai/
     ...
-  character3/
+  Shinobi/
     ...
 ```
 
