@@ -2,11 +2,16 @@ const ROOM_TTL_SECONDS = 60 * 60 * 2;
 const ROOM_TTL_MS = ROOM_TTL_SECONDS * 1000;
 const MAX_COMMAND_BUFFER = 250;
 
-let kv = null;
+let redis = null;
 try {
-  ({ kv } = require('@vercel/kv'));
+  const { Redis } = require('@upstash/redis');
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) {
+    redis = new Redis({ url, token });
+  }
 } catch {
-  kv = null;
+  redis = null;
 }
 
 const memoryRooms = globalThis.__gamefightRooms || (globalThis.__gamefightRooms = new Map());
@@ -47,14 +52,14 @@ function parseBody(req) {
   return req.body;
 }
 
-function kvEnabled() {
-  return Boolean(kv && process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+function redisEnabled() {
+  return Boolean(redis);
 }
 
 async function loadRoom(roomId) {
   if (!roomId) return null;
-  if (kvEnabled()) {
-    return kv.get(roomKey(roomId));
+  if (redisEnabled()) {
+    return redis.get(roomKey(roomId));
   }
   return memoryRooms.get(roomId) || null;
 }
@@ -62,8 +67,8 @@ async function loadRoom(roomId) {
 async function saveRoom(room) {
   room.updatedAt = now();
   room.expiresAt = room.updatedAt + ROOM_TTL_MS;
-  if (kvEnabled()) {
-    await kv.set(roomKey(room.id), room, { ex: ROOM_TTL_SECONDS });
+  if (redisEnabled()) {
+    await redis.set(roomKey(room.id), room, { ex: ROOM_TTL_SECONDS });
     return;
   }
   memoryRooms.set(room.id, room);
@@ -71,8 +76,8 @@ async function saveRoom(room) {
 
 async function deleteRoom(roomId) {
   if (!roomId) return;
-  if (kvEnabled()) {
-    await kv.del(roomKey(roomId));
+  if (redisEnabled()) {
+    await redis.del(roomKey(roomId));
     return;
   }
   memoryRooms.delete(roomId);

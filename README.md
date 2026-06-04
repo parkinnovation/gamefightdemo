@@ -22,7 +22,7 @@ Com isso:
 - Frontend: `index.html`, `styles.css`, `game.js`
 - Backend Node (serverless): `api/rooms.js`
 - Persistencia:
-  - producao: Vercel KV (`@vercel/kv`) para sincronizacao entre instancias
+  - producao: Upstash Redis (`@upstash/redis`) para sincronizacao entre instancias
   - fallback local/dev: memoria em processo
 
 Fluxo online:
@@ -80,21 +80,21 @@ Controles:
 
 Conecte o repositorio na Vercel e mantenha a branch desejada.
 
-### 2) Criar KV
+### 2) Criar Redis no Upstash
 
-No dashboard da Vercel:
+No dashboard do Upstash:
 
-1. `Storage` -> `Create` -> `KV`
-2. Vincule ao projeto
+1. Crie uma base Redis
+2. Copie `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN`
 
 ### 3) Variaveis de ambiente
 
-A Vercel injeta automaticamente:
+A Vercel injeta automaticamente, quando configuradas no projeto:
 
-- `KV_REST_API_URL`
-- `KV_REST_API_TOKEN`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
-Sem KV, o backend cai em memoria local (nao recomendado para producao distribuida).
+Sem Redis, o backend cai em memoria local (nao recomendado para producao distribuida).
 
 ### 4) Deploy
 
