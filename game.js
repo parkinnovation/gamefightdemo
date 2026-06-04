@@ -519,6 +519,7 @@ function getActionFileNameCandidates(name) {
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
   if (name === 'attack1') return ['Attack_1.png', 'Attack1.png', `${capitalized}.png`];
   if (name === 'attack2') return ['Attack_2.png', 'Attack2.png', `${capitalized}.png`];
+  if (name === 'ko') return ['Dead.png', `${capitalized}.png`];
   if (name === 'dead') return ['Dead..png', 'Dead.png', `${capitalized}.png`];
   return [`${capitalized}.png`];
 }
