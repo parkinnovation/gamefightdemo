@@ -114,8 +114,14 @@ module.exports = async function handler(req, res) {
     const roomId = sanitizeRoomId(req.query.roomId);
     const role = String(req.query.role || '');
     const since = Number(req.query.since || 0);
-    const room = await requireRoom(roomId, res);
-    if (!room) return;
+    const room = await loadRoom(roomId);
+    if (!room) {
+      return json(res, 200, { ok: true, room: null });
+    }
+    if (room.expiresAt && room.expiresAt < now()) {
+      await deleteRoom(roomId);
+      return json(res, 200, { ok: true, room: null });
+    }
 
     if (role === 'host') {
       const newCommands = (room.commands || []).filter((entry) => entry.id > since);
