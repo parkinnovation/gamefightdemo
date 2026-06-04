@@ -14,6 +14,15 @@ const characters = [
 ];
 
 const ACTIONS = ['idle', 'walk', 'jump', 'attack1', 'attack2', 'hurt', 'ko'];
+const ACTION_ASSET_CANDIDATES = {
+  idle: ['idle'],
+  walk: ['walk', 'run'],
+  jump: ['jump'],
+  attack1: ['attack1', 'attack', 'punch'],
+  attack2: ['attack2', 'attack', 'kick'],
+  hurt: ['hurt', 'hit', 'damage'],
+  ko: ['ko', 'dead', 'death']
+};
 
 const state = {
   selectedCharacterId: null,
@@ -57,7 +66,7 @@ function getAssetCandidates(folder, fileName) {
   return ASSET_ROOT_CANDIDATES.map((root) => `${root}/${folder}/${fileName}`);
 }
 
-function loadImageWithFallback(img, candidates, onFailure) {
+function loadImageWithFallback(img, candidates, onFailure, onLoad) {
   let index = 0;
   const tryNext = () => {
     if (index >= candidates.length) {
@@ -68,8 +77,36 @@ function loadImageWithFallback(img, candidates, onFailure) {
     index += 1;
   };
 
+  img.onload = () => {
+    if (typeof onLoad === 'function') onLoad(img);
+  };
   img.onerror = () => tryNext();
   tryNext();
+}
+
+function getActionCandidates(action) {
+  return ACTION_ASSET_CANDIDATES[action] || [action];
+}
+
+function getActionAssetCandidates(folder, action) {
+  return getActionCandidates(action).flatMap((name) => getAssetCandidates(folder, `${name}.png`));
+}
+
+function getSpriteForAction(sprites, action) {
+  return sprites[action] || sprites.idle;
+}
+
+function renderSpritePreview(img) {
+  const frameHeight = img.naturalHeight;
+  const frameCount = Math.max(1, Math.floor(img.naturalWidth / frameHeight));
+  const frameWidth = img.naturalWidth / frameCount;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'character-sprite';
+  canvas.width = frameWidth;
+  canvas.height = frameHeight;
+  const previewCtx = canvas.getContext('2d');
+  previewCtx.drawImage(img, 0, 0, frameWidth, frameHeight, 0, 0, frameWidth, frameHeight);
+  img.replaceWith(canvas);
 }
 
 function buildCharacterSelect() {
@@ -88,7 +125,7 @@ function buildCharacterSelect() {
       fallback.className = 'character-preview';
       fallback.textContent = fallbackLabel;
       img.replaceWith(fallback);
-    });
+    }, renderSpritePreview);
   });
 
   dom.characterGrid.querySelectorAll('.character-card').forEach((card) => {
@@ -105,19 +142,18 @@ function createSpriteSet(folder) {
   const sprites = {};
   for (const action of ACTIONS) {
     const img = new Image();
-    loadImageWithFallback(img, getAssetCandidates(folder, `${action}.png`));
     sprites[action] = {
       image: img,
       frameCount: FRAME_COUNT,
       frameWidth: 0,
       frameHeight: 0
     };
-    img.onload = () => {
+    loadImageWithFallback(img, getActionAssetCandidates(folder, action), undefined, () => {
       const inferredFrameCount = Math.max(1, Math.floor(img.naturalWidth / img.naturalHeight));
       sprites[action].frameCount = inferredFrameCount;
       sprites[action].frameWidth = img.naturalWidth / inferredFrameCount;
       sprites[action].frameHeight = img.naturalHeight;
-    };
+    });
   }
   return sprites;
 }
@@ -176,7 +212,7 @@ class Fighter {
     this.frameTick += 1;
     if (this.frameTick >= 6) {
       this.frameTick = 0;
-      const frameCount = this.sprites[this.currentAction]?.frameCount || FRAME_COUNT;
+      const frameCount = getSpriteForAction(this.sprites, this.currentAction)?.frameCount || FRAME_COUNT;
       this.frameIndex = (this.frameIndex + 1) % frameCount;
     }
   }
@@ -224,7 +260,7 @@ class Fighter {
 
   draw() {
     const hb = this.hitbox;
-    const sprite = this.sprites[this.currentAction];
+    const sprite = getSpriteForAction(this.sprites, this.currentAction);
     ctx.save();
     if (!this.faceRight) {
       ctx.translate(this.x, 0);
