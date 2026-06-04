@@ -4,13 +4,13 @@ const GROUND_Y = 530;
 const GRAVITY = 0.95;
 const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
-const ASSET_ROOT = 'ASSETSGAME';
+const ASSET_ROOT_CANDIDATES = ['assets', 'ASSETSGAME', 'AssetsGame'];
 const FRAME_COUNT = 12;
 
 const characters = [
-  { id: 'char1', name: 'Lutador 1', folder: `${ASSET_ROOT}/character1`, color: '#38bdf8' },
-  { id: 'char2', name: 'Lutador 2', folder: `${ASSET_ROOT}/character2`, color: '#fb7185' },
-  { id: 'char3', name: 'Lutador 3', folder: `${ASSET_ROOT}/character3`, color: '#facc15' }
+  { id: 'char1', name: 'Lutador 1', folder: 'character1', color: '#38bdf8' },
+  { id: 'char2', name: 'Lutador 2', folder: 'character2', color: '#fb7185' },
+  { id: 'char3', name: 'Lutador 3', folder: 'character3', color: '#facc15' }
 ];
 
 const ACTIONS = ['idle', 'walk', 'jump', 'attack1', 'attack2', 'hurt', 'ko'];
@@ -53,13 +53,43 @@ let player;
 let cpu;
 let timerInterval;
 
+function getAssetCandidates(folder, fileName) {
+  return ASSET_ROOT_CANDIDATES.map((root) => `${root}/${folder}/${fileName}`);
+}
+
+function loadImageWithFallback(img, candidates, onFailure) {
+  let index = 0;
+  const tryNext = () => {
+    if (index >= candidates.length) {
+      if (typeof onFailure === 'function') onFailure();
+      return;
+    }
+    img.src = candidates[index];
+    index += 1;
+  };
+
+  img.onerror = () => tryNext();
+  tryNext();
+}
+
 function buildCharacterSelect() {
   dom.characterGrid.innerHTML = characters.map((char) => `
     <article class="character-card" data-char-id="${char.id}">
-      <img src="${char.folder}/idle.png" alt="${char.name}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'character-preview',textContent:'${char.name.slice(0, 3).toUpperCase()}'}))" />
+      <img class="character-sprite" data-folder="${char.folder}" alt="${char.name}" />
       <div class="card-title">${char.name}</div>
     </article>
   `).join('');
+
+  dom.characterGrid.querySelectorAll('img.character-sprite').forEach((img) => {
+    const folder = img.dataset.folder;
+    const fallbackLabel = img.alt.slice(0, 3).toUpperCase();
+    loadImageWithFallback(img, getAssetCandidates(folder, 'idle.png'), () => {
+      const fallback = document.createElement('div');
+      fallback.className = 'character-preview';
+      fallback.textContent = fallbackLabel;
+      img.replaceWith(fallback);
+    });
+  });
 
   dom.characterGrid.querySelectorAll('.character-card').forEach((card) => {
     card.addEventListener('click', () => {
@@ -75,7 +105,7 @@ function createSpriteSet(folder) {
   const sprites = {};
   for (const action of ACTIONS) {
     const img = new Image();
-    img.src = `${folder}/${action}.png`;
+    loadImageWithFallback(img, getAssetCandidates(folder, `${action}.png`));
     sprites[action] = {
       image: img,
       frameCount: FRAME_COUNT,

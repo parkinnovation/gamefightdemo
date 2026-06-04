@@ -9,7 +9,7 @@ Jogo de luta 1x1 em estilo Street Fight com:
 
 ## Estrutura de assets
 
-Coloque os assets do Drive nestas pastas:
+Coloque os assets nestas pastas. O jogo tenta automaticamente `assets/`, `ASSETSGAME/` e `AssetsGame/`:
 
 ```text
 ASSETSGAME/
