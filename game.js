@@ -4,7 +4,7 @@ const GROUND_Y = 530;
 const GRAVITY = 0.95;
 const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
-const ASSET_ROOT_CANDIDATES = ['/AssetsGame', 'AssetsGame'];
+const ASSET_ROOT_CANDIDATES = ['/AssetsGame', 'AssetsGame', '/assets', 'assets'];
 const FRAME_COUNT = 12;
 const ONLINE_CONNECTION_TIMEOUT_MS = 10000;
 const ONLINE_POLL_INTERVAL_MS = 80;
@@ -39,6 +39,7 @@ const state = {
     sessionId: '',
     connectionTimeoutId: null,
     pollIntervalId: null,
+    pollInFlight: false,
     connected: false,
     localChoice: null,
     remoteChoice: null,
@@ -46,7 +47,10 @@ const state = {
     localControls: null,
     remoteControls: null,
     lastCommandId: 0,
-    lastStatePushAt: 0
+    lastStatePushAt: 0,
+    statePushInFlight: false,
+    statePushDirty: false,
+    pendingSnapshot: null
   },
   running: false,
   round: 1,
@@ -181,6 +185,7 @@ function canUseOnlineTransport() {
 async function onlineApiRequest(body) {
   const response = await fetch(ONLINE_API_PATH, {
     method: 'POST',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json'
     },
@@ -203,12 +208,13 @@ async function pollOnlineSync() {
   if (!state.online.roomId || !state.online.role) return;
   const params = new URLSearchParams({
     roomId: state.online.roomId,
-    role: state.online.role
+    role: state.online.role,
+    t: String(Date.now())
   });
   if (state.online.role === 'host') {
     params.set('since', String(state.online.lastCommandId));
   }
-  const response = await fetch(`${ONLINE_API_PATH}?${params.toString()}`);
+  const response = await fetch(`${ONLINE_API_PATH}?${params.toString()}`, { cache: 'no-store' });
   if (!response.ok) return;
   const payload = await response.json();
   if (!payload?.ok || !payload.room) return;
@@ -263,12 +269,27 @@ async function pollOnlineSync() {
 
 function startOnlinePolling() {
   if (state.online.pollIntervalId) {
-    clearInterval(state.online.pollIntervalId);
+    clearTimeout(state.online.pollIntervalId);
   }
-  state.online.pollIntervalId = window.setInterval(() => {
-    pollOnlineSync().catch(() => {});
-  }, ONLINE_POLL_INTERVAL_MS);
-  pollOnlineSync().catch(() => {});
+  const runPoll = async () => {
+    if (!state.online.roomId || !state.online.role) return;
+    if (state.online.pollInFlight) {
+      state.online.pollIntervalId = window.setTimeout(runPoll, ONLINE_POLL_INTERVAL_MS);
+      return;
+    }
+    state.online.pollInFlight = true;
+    try {
+      await pollOnlineSync();
+    } catch {
+      // Ignore transient network errors.
+    } finally {
+      state.online.pollInFlight = false;
+      if (state.online.roomId && state.online.role) {
+        state.online.pollIntervalId = window.setTimeout(runPoll, ONLINE_POLL_INTERVAL_MS);
+      }
+    }
+  };
+  runPoll();
 }
 
 function updateControlState(controlState, code, isDown) {
@@ -614,7 +635,7 @@ function closeOnlineTransport() {
     clearTimeout(state.online.connectionTimeoutId);
   }
   if (state.online.pollIntervalId) {
-    clearInterval(state.online.pollIntervalId);
+    clearTimeout(state.online.pollIntervalId);
   }
   state.online.sessionId = '';
   state.online.connectionTimeoutId = null;
@@ -622,6 +643,7 @@ function closeOnlineTransport() {
   state.online.roomId = '';
   state.online.role = null;
   state.online.connected = false;
+  state.online.pollInFlight = false;
   state.online.localChoice = null;
   state.online.remoteChoice = null;
   state.online.latestSnapshot = null;
@@ -629,6 +651,9 @@ function closeOnlineTransport() {
   state.online.remoteControls = null;
   state.online.lastCommandId = 0;
   state.online.lastStatePushAt = 0;
+  state.online.statePushInFlight = false;
+  state.online.statePushDirty = false;
+  state.online.pendingSnapshot = null;
 }
 
 function buildMatchSnapshot() {
@@ -654,12 +679,37 @@ function broadcastMatchState(force = false) {
   const now = Date.now();
   if (!force && now - state.online.lastStatePushAt < ONLINE_STATE_PUSH_INTERVAL_MS) return;
   state.online.lastStatePushAt = now;
+  const snapshot = buildMatchSnapshot();
+  if (state.online.statePushInFlight) {
+    state.online.statePushDirty = true;
+    state.online.pendingSnapshot = snapshot;
+    return;
+  }
+  state.online.statePushInFlight = true;
   onlineApiRequest({
     action: 'state',
     roomId: state.online.roomId,
     sessionId: state.online.sessionId,
-    snapshot: buildMatchSnapshot()
-  }).catch(() => {});
+    snapshot
+  }).catch(() => {})
+    .finally(() => {
+      state.online.statePushInFlight = false;
+      if (!state.online.statePushDirty || state.mode !== 'online' || state.online.role !== 'host' || !state.online.roomId) return;
+      state.online.statePushDirty = false;
+      const pendingSnapshot = state.online.pendingSnapshot || buildMatchSnapshot();
+      state.online.pendingSnapshot = null;
+      state.online.lastStatePushAt = Date.now();
+      state.online.statePushInFlight = true;
+      onlineApiRequest({
+        action: 'state',
+        roomId: state.online.roomId,
+        sessionId: state.online.sessionId,
+        snapshot: pendingSnapshot
+      }).catch(() => {})
+        .finally(() => {
+          state.online.statePushInFlight = false;
+        });
+    });
 }
 
 function applyMatchSnapshot(snapshot) {
