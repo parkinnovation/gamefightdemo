@@ -4,11 +4,13 @@ const GROUND_Y = 530;
 const GRAVITY = 0.95;
 const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
+const ASSET_ROOT = 'ASSETSGAME';
+const FRAME_COUNT = 12;
 
 const characters = [
-  { id: 'char1', name: 'Lutador 1', folder: 'assets/character1', color: '#38bdf8' },
-  { id: 'char2', name: 'Lutador 2', folder: 'assets/character2', color: '#fb7185' },
-  { id: 'char3', name: 'Lutador 3', folder: 'assets/character3', color: '#facc15' }
+  { id: 'char1', name: 'Lutador 1', folder: `${ASSET_ROOT}/character1`, color: '#38bdf8' },
+  { id: 'char2', name: 'Lutador 2', folder: `${ASSET_ROOT}/character2`, color: '#fb7185' },
+  { id: 'char3', name: 'Lutador 3', folder: `${ASSET_ROOT}/character3`, color: '#facc15' }
 ];
 
 const ACTIONS = ['idle', 'walk', 'jump', 'attack1', 'attack2', 'hurt', 'ko'];
@@ -54,7 +56,7 @@ let timerInterval;
 function buildCharacterSelect() {
   dom.characterGrid.innerHTML = characters.map((char) => `
     <article class="character-card" data-char-id="${char.id}">
-      <img src="${char.folder}/idle/1.png" alt="${char.name}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'character-preview',textContent:'${char.name.slice(0, 3).toUpperCase()}'}))" />
+      <img src="${char.folder}/idle.png" alt="${char.name}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'character-preview',textContent:'${char.name.slice(0, 3).toUpperCase()}'}))" />
       <div class="card-title">${char.name}</div>
     </article>
   `).join('');
@@ -72,12 +74,20 @@ function buildCharacterSelect() {
 function createSpriteSet(folder) {
   const sprites = {};
   for (const action of ACTIONS) {
-    sprites[action] = [];
-    for (let i = 1; i <= 12; i += 1) {
-      const img = new Image();
-      img.src = `${folder}/${action}/${i}.png`;
-      sprites[action].push(img);
-    }
+    const img = new Image();
+    img.src = `${folder}/${action}.png`;
+    sprites[action] = {
+      image: img,
+      frameCount: FRAME_COUNT,
+      frameWidth: 0,
+      frameHeight: 0
+    };
+    img.onload = () => {
+      const inferredFrameCount = Math.max(1, Math.floor(img.naturalWidth / img.naturalHeight));
+      sprites[action].frameCount = inferredFrameCount;
+      sprites[action].frameWidth = img.naturalWidth / inferredFrameCount;
+      sprites[action].frameHeight = img.naturalHeight;
+    };
   }
   return sprites;
 }
@@ -114,17 +124,30 @@ class Fighter {
 
   updateAnimation() {
     const moving = Math.abs(this.vx) > 0.4;
-    if (this.ko) this.currentAction = 'ko';
-    else if (this.hurtTime > 0) this.currentAction = 'hurt';
-    else if (this.attackTime > 0) this.currentAction = this.attackKind;
-    else if (this.vy < -2) this.currentAction = 'jump';
-    else if (moving) this.currentAction = 'walk';
-    else this.currentAction = 'idle';
+    const nextAction = this.ko
+      ? 'ko'
+      : this.hurtTime > 0
+        ? 'hurt'
+        : this.attackTime > 0
+          ? this.attackKind
+          : this.vy < -2
+            ? 'jump'
+            : moving
+              ? 'walk'
+              : 'idle';
+
+    if (nextAction !== this.currentAction) {
+      this.currentAction = nextAction;
+      this.frameTick = 0;
+      this.frameIndex = 0;
+      return;
+    }
 
     this.frameTick += 1;
     if (this.frameTick >= 6) {
       this.frameTick = 0;
-      this.frameIndex = (this.frameIndex + 1) % 12;
+      const frameCount = this.sprites[this.currentAction]?.frameCount || FRAME_COUNT;
+      this.frameIndex = (this.frameIndex + 1) % frameCount;
     }
   }
 
@@ -171,16 +194,26 @@ class Fighter {
 
   draw() {
     const hb = this.hitbox;
-    const frames = this.sprites[this.currentAction] || [];
-    const frame = frames[this.frameIndex] || frames[0];
+    const sprite = this.sprites[this.currentAction];
     ctx.save();
     if (!this.faceRight) {
       ctx.translate(this.x, 0);
       ctx.scale(-1, 1);
       ctx.translate(-this.x, 0);
     }
-    if (frame && frame.complete && frame.naturalWidth > 0) {
-      ctx.drawImage(frame, hb.x - 35, hb.y - 30, hb.w + 70, hb.h + 30);
+    if (sprite?.image.complete && sprite.image.naturalWidth > 0 && sprite.frameWidth > 0) {
+      const sx = Math.min(this.frameIndex, sprite.frameCount - 1) * sprite.frameWidth;
+      ctx.drawImage(
+        sprite.image,
+        sx,
+        0,
+        sprite.frameWidth,
+        sprite.frameHeight,
+        hb.x - 35,
+        hb.y - 30,
+        hb.w + 70,
+        hb.h + 30
+      );
     } else {
       ctx.fillStyle = this.color;
       ctx.fillRect(hb.x, hb.y, hb.w, hb.h);

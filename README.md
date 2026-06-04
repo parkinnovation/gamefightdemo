@@ -12,20 +12,23 @@ Jogo de luta 1x1 em estilo Street Fight com:
 Coloque os assets do Drive nestas pastas:
 
 ```text
-assets/
+ASSETSGAME/
   character1/
-    idle/1.png ... 12.png
-    walk/1.png ... 12.png
-    jump/1.png ... 12.png
-    attack1/1.png ... 12.png
-    attack2/1.png ... 12.png
-    hurt/1.png ... 12.png
-    ko/1.png ... 12.png
+    idle.png
+    walk.png
+    jump.png
+    attack1.png
+    attack2.png
+    hurt.png
+    ko.png
   character2/
     ...
   character3/
     ...
 ```
+
+Cada imagem deve ser um spritesheet horizontal com a animacao completa da acao.
+O jogo corta a imagem em 12 quadros na ordem da esquerda para a direita.
 
 Se algum sprite nao existir, o jogo usa fallback visual automaticamente.
 
