@@ -42,3 +42,15 @@ Controles:
 - `W`: pular
 - `J`: ataque 1
 - `K`: ataque 2
+
+## Multiplayer online
+
+O modo online nao usa backend proprio. A troca de mensagens entre os dois jogadores acontece no navegador, usando `BroadcastChannel` e, quando necessario, um fallback via `localStorage`.
+
+Para funcionar no deploy:
+
+- sirva o jogo por `http://` ou `https://`, nao por `file://`
+- abra os dois jogadores na mesma origem exata, incluindo protocolo, dominio e porta
+- evite colocar um jogador em um dominio/subdominio diferente do outro
+
+Se a pagina for aberta diretamente do disco ou em origens diferentes, a sala nao sincroniza.
