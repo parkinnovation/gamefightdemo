@@ -4,13 +4,13 @@ const GROUND_Y = 530;
 const GRAVITY = 0.95;
 const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
-const ASSET_ROOT_CANDIDATES = ['assets', 'ASSETSGAME', 'AssetsGame'];
+const ASSET_ROOT_CANDIDATES = ['/assets', 'assets', './assets', '/ASSETSGAME', '/AssetsGame', 'ASSETSGAME', 'AssetsGame'];
 const FRAME_COUNT = 12;
 
 const characters = [
-  { id: 'fighter', name: 'Fighter', folder: 'Fighter', color: '#38bdf8' },
-  { id: 'samurai', name: 'Samurai', folder: 'Samurai', color: '#fb7185' },
-  { id: 'shinobi', name: 'Shinobi', folder: 'Shinobi', color: '#facc15' }
+  { id: 'fighter', name: 'Fighter', folder: 'Fighter', folderCandidates: ['Fighter', 'fighter', 'character1'], color: '#38bdf8' },
+  { id: 'samurai', name: 'Samurai', folder: 'Samurai', folderCandidates: ['Samurai', 'samurai', 'character2'], color: '#fb7185' },
+  { id: 'shinobi', name: 'Shinobi', folder: 'Shinobi', folderCandidates: ['Shinobi', 'shinobi', 'character3'], color: '#facc15' }
 ];
 
 const ACTIONS = ['idle', 'walk', 'jump', 'attack1', 'attack2', 'hurt', 'ko'];
@@ -66,6 +66,10 @@ function getAssetCandidates(folder, fileName) {
   return ASSET_ROOT_CANDIDATES.map((root) => `${root}/${folder}/${fileName}`);
 }
 
+function getCharacterCandidates(character) {
+  return character.folderCandidates || [character.folder];
+}
+
 function loadImageWithFallback(img, candidates, onFailure, onLoad) {
   let index = 0;
   const tryNext = () => {
@@ -89,7 +93,11 @@ function getActionCandidates(action) {
 }
 
 function getActionAssetCandidates(folder, action) {
-  return getActionCandidates(action).flatMap((name) => getAssetCandidates(folder, `${name}.png`));
+  return getActionCandidates(action).flatMap((name) => getAssetCandidates(folder, `${name}.png`).concat(getAssetCandidates(folder, `${name}.PNG`)));
+}
+
+function getActionAssetCandidatesForCharacter(character, action) {
+  return getCharacterCandidates(character).flatMap((folder) => getActionAssetCandidates(folder, action));
 }
 
 function getSpriteForAction(sprites, action) {
@@ -118,9 +126,9 @@ function buildCharacterSelect() {
   `).join('');
 
   dom.characterGrid.querySelectorAll('img.character-sprite').forEach((img) => {
-    const folder = img.dataset.folder;
+    const character = characters.find((char) => char.folder === img.dataset.folder);
     const fallbackLabel = img.alt.slice(0, 3).toUpperCase();
-    loadImageWithFallback(img, getAssetCandidates(folder, 'idle.png'), () => {
+    loadImageWithFallback(img, character ? getActionAssetCandidatesForCharacter(character, 'idle') : getAssetCandidates(img.dataset.folder, 'idle.png'), () => {
       const fallback = document.createElement('div');
       fallback.className = 'character-preview';
       fallback.textContent = fallbackLabel;
@@ -140,6 +148,7 @@ function buildCharacterSelect() {
 
 function createSpriteSet(folder) {
   const sprites = {};
+  const character = characters.find((char) => char.folder === folder);
   for (const action of ACTIONS) {
     const img = new Image();
     sprites[action] = {
@@ -148,7 +157,7 @@ function createSpriteSet(folder) {
       frameWidth: 0,
       frameHeight: 0
     };
-    loadImageWithFallback(img, getActionAssetCandidates(folder, action), undefined, () => {
+    loadImageWithFallback(img, character ? getActionAssetCandidatesForCharacter(character, action) : getActionAssetCandidates(folder, action), undefined, () => {
       const inferredFrameCount = Math.max(1, Math.floor(img.naturalWidth / img.naturalHeight));
       sprites[action].frameCount = inferredFrameCount;
       sprites[action].frameWidth = img.naturalWidth / inferredFrameCount;
