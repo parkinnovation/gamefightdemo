@@ -499,6 +499,7 @@ function setupOnlineTransport(roomId, role) {
   const handleOnlineMessage = (data = {}) => {
     if (data.roomId !== state.online.roomId) return;
     if (data.type === 'join-request' && state.online.role === 'host') {
+      if (!data.choice) return;
       state.online.remoteChoice = data.choice;
       state.cpuChoice = { ...data.choice };
       state.online.connected = true;
