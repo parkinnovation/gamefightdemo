@@ -18,8 +18,8 @@ const ACTION_ASSET_CANDIDATES = {
   idle: ['idle'],
   walk: ['walk', 'run'],
   jump: ['jump'],
-  attack1: ['attack1', 'attack', 'punch'],
-  attack2: ['attack2', 'attack', 'kick'],
+  attack1: ['attack1', 'attack_1', 'Attack_1', 'attack', 'punch'],
+  attack2: ['attack2', 'attack_2', 'Attack_2', 'attack3', 'attack_3', 'Attack_3', 'attack', 'kick'],
   hurt: ['hurt', 'hit', 'damage'],
   ko: ['ko', 'dead', 'death']
 };
