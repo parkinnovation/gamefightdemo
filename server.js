@@ -115,6 +115,9 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {
+  if (ws?._socket && typeof ws._socket.setNoDelay === 'function') {
+    ws._socket.setNoDelay(true);
+  }
   ws.on('message', (raw) => {
     let message;
     try {
