@@ -9,6 +9,7 @@ const FRAME_COUNT = 12;
 const ONLINE_STATE_PUSH_INTERVAL_MS = 33;
 const ONLINE_API_POLL_INTERVAL_MS = 120;
 const ONLINE_INPUT_PUSH_INTERVAL_MS = 16;
+const ONLINE_DISCONNECT_RESET_MS = 1800;
 const ONLINE_WS_PATH = '/ws';
 
 const characters = [
@@ -180,8 +181,14 @@ function isLocalDevelopmentHost() {
   return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 }
 
+function isVercelDeploymentHost() {
+  return window.location.hostname === 'gamefightdemo.vercel.app' || window.location.hostname.endsWith('.vercel.app');
+}
+
 function getPreferredOnlineTransport() {
-  return typeof window.WebSocket === 'function' ? 'ws' : null;
+  if (!canUseOnlineTransport()) return null;
+  if (isVercelDeploymentHost()) return 'api';
+  return typeof window.WebSocket === 'function' ? 'ws' : 'api';
 }
 
 function getOnlineSocketUrl() {
@@ -256,6 +263,10 @@ async function fetchOnlineRoomState() {
 }
 
 function sendOnlineMessage(payload) {
+  if (state.online.transport === 'api') {
+    void postOnlineAction(payload).catch(() => {});
+    return true;
+  }
   if (!state.online.socket || state.online.socket.readyState !== WebSocket.OPEN) return false;
   state.online.socket.send(JSON.stringify(payload));
   return true;
@@ -263,9 +274,23 @@ function sendOnlineMessage(payload) {
 
 function handleOnlineDisconnect(message) {
   if (state.mode !== 'online') return;
+  const wasRunning = state.running;
   state.running = false;
   clearInterval(timerInterval);
   closeOnlineTransport();
+  if (wasRunning) {
+    state.roundOver = true;
+    state.gameOver = true;
+    state.overlayMessage = message;
+    refreshHud();
+    setRoomStatus(message);
+    setTimeout(() => {
+      if (state.mode === 'online' && !state.running) {
+        resetToSelect();
+      }
+    }, ONLINE_DISCONNECT_RESET_MS);
+    return;
+  }
   refreshModeUi();
   dom.fightScreen.classList.remove('active');
   dom.selectScreen.classList.add('active');
@@ -316,7 +341,7 @@ function handleOnlineMessage(payload) {
   }
   if (payload.type === 'peer-left' && state.online.role === 'host') {
     state.online.connected = false;
-    setRoomStatus('Oponente desconectou.');
+    handleOnlineDisconnect('Oponente desconectou.');
     return;
   }
   if (payload.type === 'guest-input' && state.online.role === 'host' && state.online.remoteControls) {
@@ -383,9 +408,12 @@ function ensureOnlineSocket() {
         if (!state.online.socketOpen) reject(new Error('Nao foi possivel conectar no servidor WebSocket.'));
       };
       socket.onclose = () => {
+        if (state.online.socket !== socket) return;
         state.online.socket = null;
         state.online.socketOpen = false;
-        handleOnlineDisconnect('Conexao encerrada com o servidor.');
+        if (state.mode === 'online' && (state.running || state.online.roomId)) {
+          handleOnlineDisconnect('Conexao encerrada com o servidor.');
+        }
       };
     } catch {
       reject(new Error('Nao foi possivel conectar no servidor WebSocket.'));
@@ -726,6 +754,12 @@ function setupOnlineSession(roomId, role, sessionId) {
   state.online.lastStatePushAt = 0;
   state.online.lastInputPushAt = 0;
   state.online.lastCommandId = 0;
+  if (state.online.transport === 'api') {
+    state.online.pollIntervalId = setInterval(() => {
+      void pollOnlineRoom();
+    }, ONLINE_API_POLL_INTERVAL_MS);
+    void pollOnlineRoom();
+  }
 }
 
 function closeOnlineTransport(closeSocket = true) {
@@ -766,9 +800,12 @@ async function pollOnlineRoom() {
   state.online.pollInFlight = true;
   try {
     const room = await fetchOnlineRoomState();
-    if (!room) return;
+    if (!room) {
+      handleOnlineDisconnect('Conexao encerrada com o servidor.');
+      return;
+    }
     if (room.closed) {
-      handleOnlineDisconnect('A sala foi encerrada.');
+      handleOnlineDisconnect(room.closedReason || 'A sala foi encerrada.');
       return;
     }
     if (state.online.role === 'host') {
@@ -1172,14 +1209,29 @@ async function beginFight() {
     return;
   }
   state.online.localChoice = { ...selected };
+  state.online.transport = getPreferredOnlineTransport();
   try {
-    await ensureOnlineSocket();
-    state.playerChoice = { ...selected };
-    sendOnlineMessage({
-      type: 'play',
-      choice: state.online.localChoice
-    });
-    setRoomStatus('Buscando oponente...');
+    if (state.online.transport === 'api') {
+      const response = await postOnlineAction({
+        type: 'play',
+        choice: state.online.localChoice
+      });
+      state.playerChoice = { ...selected };
+      handleOnlineMessage({
+        type: response.role === 'host' ? 'created' : 'joined',
+        roomId: response.roomId,
+        sessionId: response.sessionId,
+        hostChoice: response.hostChoice || null
+      });
+    } else {
+      await ensureOnlineSocket();
+      state.playerChoice = { ...selected };
+      sendOnlineMessage({
+        type: 'play',
+        choice: state.online.localChoice
+      });
+      setRoomStatus('Buscando oponente...');
+    }
     dom.startFightBtn.disabled = true;
     if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
   } catch (error) {

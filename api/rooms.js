@@ -2,6 +2,7 @@ const ROOM_TTL_SECONDS = 60 * 60 * 2;
 const ROOM_TTL_MS = ROOM_TTL_SECONDS * 1000;
 const MAX_COMMAND_BUFFER = 250;
 const WAITING_ROOM_KEY = 'match:waiting-room';
+const STALE_CONNECTION_MS = 1000 * 12;
 
 let redis = null;
 try {
@@ -19,6 +20,10 @@ const memoryRooms = globalThis.__gamefightRooms || (globalThis.__gamefightRooms 
 
 function now() {
   return Date.now();
+}
+
+function isStale(lastSeenAt) {
+  return Boolean(lastSeenAt) && now() - lastSeenAt > STALE_CONNECTION_MS;
 }
 
 function roomKey(roomId) {
@@ -120,6 +125,32 @@ async function clearWaitingRoomId(roomId) {
   }
 }
 
+function touchPresence(room, role) {
+  if (!room) return;
+  if (role === 'host') room.hostLastSeenAt = now();
+  if (role === 'guest') room.guestLastSeenAt = now();
+}
+
+async function closeRoom(room, reason) {
+  if (!room) return room;
+  room.closed = true;
+  room.matchEnded = true;
+  room.closedReason = reason || room.closedReason || 'A sala foi encerrada.';
+  await saveRoom(room);
+  await clearWaitingRoomId(room.id);
+  return room;
+}
+
+async function closeIfStale(room) {
+  if (!room || room.closed) return room;
+  const matchActive = Boolean(room.matchStarted) && !room.matchEnded;
+  if (!matchActive) return room;
+  const hostStale = room.hostSessionId && isStale(room.hostLastSeenAt);
+  const guestStale = room.guestSessionId && isStale(room.guestLastSeenAt);
+  if (!hostStale && !guestStale) return room;
+  return closeRoom(room, 'Conexao encerrada com o servidor.');
+}
+
 async function requireRoom(roomId, res) {
   const room = await loadRoom(roomId);
   if (!room) {
@@ -155,6 +186,8 @@ module.exports = async function handler(req, res) {
       await deleteRoom(roomId);
       return json(res, 200, { ok: true, room: null });
     }
+    touchPresence(room, role);
+    await closeIfStale(room);
 
     if (role === 'host') {
       const newCommands = (room.commands || []).filter((entry) => entry.id > since);
@@ -165,7 +198,9 @@ module.exports = async function handler(req, res) {
           guestControls: room.guestControls || { pressed: {} },
           newCommands,
           matchStarted: Boolean(room.matchStarted),
-          closed: Boolean(room.closed)
+          matchEnded: Boolean(room.matchEnded),
+          closed: Boolean(room.closed),
+          closedReason: room.closedReason || null
         }
       });
     }
@@ -178,7 +213,8 @@ module.exports = async function handler(req, res) {
         matchStarted: Boolean(room.matchStarted),
         matchEnded: Boolean(room.matchEnded),
         latestSnapshot: room.latestSnapshot || null,
-        closed: Boolean(room.closed)
+        closed: Boolean(room.closed),
+        closedReason: room.closedReason || null
       }
     });
   }
@@ -200,6 +236,7 @@ module.exports = async function handler(req, res) {
         const sessionId = makeSessionId();
         waitingRoom.guestSessionId = sessionId;
         waitingRoom.guestChoice = body.choice || waitingRoom.guestChoice || null;
+        waitingRoom.guestLastSeenAt = now();
         await saveRoom(waitingRoom);
         await clearWaitingRoomId(waitingRoomId);
         return json(res, 200, {
@@ -227,13 +264,16 @@ module.exports = async function handler(req, res) {
       guestChoice: null,
       hostSessionId: sessionId,
       guestSessionId: null,
+      hostLastSeenAt: now(),
+      guestLastSeenAt: null,
       guestControls: { pressed: {} },
       commands: [],
       lastCommandId: 0,
       matchStarted: false,
       matchEnded: false,
       latestSnapshot: null,
-      closed: false
+      closed: false,
+      closedReason: null
     };
     await saveRoom(room);
     await saveWaitingRoomId(roomId);
@@ -253,6 +293,7 @@ module.exports = async function handler(req, res) {
     const nextSessionId = room.guestSessionId || makeSessionId();
     room.guestSessionId = nextSessionId;
     room.guestChoice = body.choice || room.guestChoice || null;
+    room.guestLastSeenAt = now();
     await saveRoom(room);
     await clearWaitingRoomId(room.id);
     return json(res, 200, { ok: true, sessionId: nextSessionId });
@@ -261,6 +302,7 @@ module.exports = async function handler(req, res) {
   if (action === 'input') {
     if (!isGuest(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
     room.guestControls = { pressed: body.controls?.pressed || {} };
+    room.guestLastSeenAt = now();
     await saveRoom(room);
     return json(res, 200, { ok: true });
   }
@@ -272,6 +314,7 @@ module.exports = async function handler(req, res) {
     if (room.commands.length > MAX_COMMAND_BUFFER) {
       room.commands = room.commands.slice(-MAX_COMMAND_BUFFER);
     }
+    room.guestLastSeenAt = now();
     await saveRoom(room);
     return json(res, 200, { ok: true, commandId: room.lastCommandId });
   }
@@ -279,6 +322,7 @@ module.exports = async function handler(req, res) {
   if (action === 'state') {
     if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
     room.latestSnapshot = body.snapshot || null;
+    room.hostLastSeenAt = now();
     await saveRoom(room);
     return json(res, 200, { ok: true });
   }
@@ -290,6 +334,7 @@ module.exports = async function handler(req, res) {
     room.hostChoice = body.hostChoice || room.hostChoice || null;
     room.guestChoice = body.guestChoice || room.guestChoice || null;
     room.latestSnapshot = body.snapshot || room.latestSnapshot || null;
+    room.hostLastSeenAt = now();
     await saveRoom(room);
     return json(res, 200, { ok: true });
   }
@@ -298,16 +343,14 @@ module.exports = async function handler(req, res) {
     if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
     room.matchEnded = true;
     room.latestSnapshot = body.snapshot || room.latestSnapshot || null;
+    room.hostLastSeenAt = now();
     await saveRoom(room);
     return json(res, 200, { ok: true });
   }
 
   if (action === 'close') {
     if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
-    room.closed = true;
-    await saveRoom(room);
-    await clearWaitingRoomId(room.id);
-    await deleteRoom(roomId);
+    await closeRoom(room, 'Partida encerrada.');
     return json(res, 200, { ok: true });
   }
 
