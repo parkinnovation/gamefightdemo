@@ -506,7 +506,7 @@ function setupOnlineTransport(roomId, role) {
       state.online.roomId = roomId;
       setRoomStatus(`Oponente conectado: ${data.choice.name}. Iniciando partida...`);
       state.overlayMessage = 'OPONENTE CONECTADO';
-      setTimeout(() => startOnlineMatch(), 900);
+      startOnlineMatch();
       return;
     }
     if (data.type === 'input' && state.online.role === 'host') {
@@ -520,6 +520,7 @@ function setupOnlineTransport(roomId, role) {
       return;
     }
     if (data.type === 'match-start' && state.online.role === 'guest') {
+      if (state.running) return;
       state.playerChoice = { ...data.hostChoice };
       state.cpuChoice = { ...data.guestChoice };
       state.online.connected = true;
@@ -529,6 +530,9 @@ function setupOnlineTransport(roomId, role) {
     }
     if (data.type === 'state' && state.online.role === 'guest') {
       state.online.latestSnapshot = data.snapshot || null;
+      if (!state.running && data.snapshot) {
+        startOnlineMatch(data.snapshot);
+      }
       return;
     }
     if (data.type === 'match-end' && state.online.role === 'guest') {
@@ -612,6 +616,8 @@ function broadcastMatchState() {
     snapshot: {
       player: serializeFighter(player),
       cpu: serializeFighter(cpu),
+      playerChoice: state.playerChoice,
+      cpuChoice: state.cpuChoice,
       round: state.round,
       timer: state.timer,
       playerRoundWins: state.playerRoundWins,
@@ -657,6 +663,8 @@ function startOnlineMatch(snapshot) {
       snapshot: {
         player: serializeFighter(player),
         cpu: serializeFighter(cpu),
+        playerChoice: state.playerChoice,
+        cpuChoice: state.cpuChoice,
         round: state.round,
         timer: state.timer,
         playerRoundWins: state.playerRoundWins,
@@ -669,6 +677,8 @@ function startOnlineMatch(snapshot) {
       }
     });
   } else {
+    state.playerChoice = state.playerChoice || snapshot.playerChoice || { ...state.online.localChoice };
+    state.cpuChoice = state.cpuChoice || snapshot.cpuChoice || { ...state.online.remoteChoice };
     startRound(false);
     applyMatchSnapshot(snapshot);
   }
@@ -708,8 +718,14 @@ function updateFacing() {
 
 function applyPlayerInput() {
   if (!state.running || state.roundOver || state.gameOver) return;
-  const controls = state.mode === 'online' ? state.online.localControls : state.localControls;
-  applyControlStateToFighter(player, controls);
+  if (state.mode === 'online') {
+    applyControlStateToFighter(player, state.online.localControls);
+    if (state.online.role === 'host') {
+      applyControlStateToFighter(cpu, state.online.remoteControls);
+    }
+    return;
+  }
+  applyControlStateToFighter(player, state.localControls);
 }
 
 function cpuAI() {
