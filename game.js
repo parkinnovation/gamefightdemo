@@ -7,9 +7,11 @@ const MAX_ROUNDS = 2;
 const ASSET_ROOT_CANDIDATES = ['AssetsGame'];
 const FRAME_COUNT = 12;
 const ONLINE_STATE_PUSH_INTERVAL_MS = 33;
-const ONLINE_API_POLL_INTERVAL_MS = 120;
+const ONLINE_API_POLL_INTERVAL_MS = 250;
 const ONLINE_INPUT_PUSH_INTERVAL_MS = 16;
 const ONLINE_DISCONNECT_RESET_MS = 1800;
+const ONLINE_POLL_ERROR_TOLERANCE = 8;
+const ONLINE_POLL_ROOM_MISS_TOLERANCE = 4;
 const ONLINE_WS_PATH = '/ws';
 
 const characters = [
@@ -45,6 +47,8 @@ const state = {
     connectionTimeoutId: null,
     pollIntervalId: null,
     pollInFlight: false,
+    pollErrorCount: 0,
+    roomMissingCount: 0,
     connected: false,
     localChoice: null,
     remoteChoice: null,
@@ -800,6 +804,8 @@ function setupOnlineSession(roomId, role, sessionId) {
   state.online.lastStatePushAt = 0;
   state.online.lastInputPushAt = 0;
   state.online.lastCommandId = 0;
+  state.online.pollErrorCount = 0;
+  state.online.roomMissingCount = 0;
   if (state.online.transport === 'api') {
     state.online.pollIntervalId = setInterval(() => {
       void pollOnlineRoom();
@@ -822,6 +828,8 @@ function closeOnlineTransport(closeSocket = true) {
   state.online.socketOpen = closeSocket ? false : state.online.socketOpen;
   state.online.pollIntervalId = null;
   state.online.pollInFlight = false;
+  state.online.pollErrorCount = 0;
+  state.online.roomMissingCount = 0;
   state.online.transport = null;
   state.online.sessionId = '';
   state.online.connectionTimeoutId = null;
@@ -848,9 +856,13 @@ async function pollOnlineRoom() {
   try {
     const room = await fetchOnlineRoomState();
     if (!room) {
+      state.online.roomMissingCount += 1;
+      if (state.online.roomMissingCount < ONLINE_POLL_ROOM_MISS_TOLERANCE) return;
       handleOnlineDisconnect('Conexao encerrada com o servidor.');
       return;
     }
+    state.online.roomMissingCount = 0;
+    state.online.pollErrorCount = 0;
     if (room.closed) {
       handleOnlineDisconnect(room.closedReason || 'A sala foi encerrada.');
       return;
@@ -892,6 +904,8 @@ async function pollOnlineRoom() {
     }
   } catch (error) {
     if (state.mode === 'online') {
+      state.online.pollErrorCount += 1;
+      if (state.online.pollErrorCount < ONLINE_POLL_ERROR_TOLERANCE) return;
       handleOnlineDisconnect(error?.message || 'Conexao encerrada com o servidor.');
     }
   } finally {
