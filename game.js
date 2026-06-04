@@ -192,6 +192,13 @@ function getPreferredOnlineTransport() {
   return typeof window.WebSocket === 'function' ? 'ws' : 'api';
 }
 
+async function resolveOnlineTransport() {
+  if (!canUseOnlineTransport()) return null;
+  const apiAvailable = await probeOnlineApi();
+  if (apiAvailable) return 'api';
+  return typeof window.WebSocket === 'function' ? 'ws' : null;
+}
+
 function getOnlineApiBaseUrl() {
   const configuredBaseUrl = String(
     window.__GAMEFIGHT_API_BASE_URL__
@@ -1249,13 +1256,12 @@ async function beginFight() {
     return;
   }
   state.online.localChoice = { ...selected };
-  state.online.transport = getPreferredOnlineTransport();
   try {
+    state.online.transport = await resolveOnlineTransport();
+    if (!state.online.transport) {
+      throw new Error('Nao foi possivel iniciar o modo online neste navegador.');
+    }
     if (state.online.transport === 'api') {
-      const apiAvailable = await probeOnlineApi();
-      if (!apiAvailable) {
-        throw new Error('O modo online nao esta disponivel neste deploy.');
-      }
       const response = await postOnlineAction({
         type: 'play',
         choice: state.online.localChoice
