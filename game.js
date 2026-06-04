@@ -6,9 +6,9 @@ const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
 const ASSET_ROOT_CANDIDATES = ['/AssetsGame', 'AssetsGame', '/assets', 'assets'];
 const FRAME_COUNT = 12;
-const ONLINE_CONNECTION_TIMEOUT_MS = 10000;
 const ONLINE_STATE_PUSH_INTERVAL_MS = 80;
-const ONLINE_API_POLL_INTERVAL_MS = 350;
+const ONLINE_API_POLL_INTERVAL_MS = 120;
+const ONLINE_INPUT_PUSH_INTERVAL_MS = 40;
 const ONLINE_WS_PATH = '/ws';
 
 const characters = [
@@ -53,7 +53,8 @@ const state = {
     lastCommandId: 0,
     statePushInFlight: false,
     statePushDirty: false,
-    pendingSnapshot: null
+    pendingSnapshot: null,
+    lastInputPushAt: 0
   },
   running: false,
   round: 1,
@@ -116,16 +117,6 @@ function clearControlState(controlState) {
   controlState.jumpQueued = false;
   controlState.attack1Queued = false;
   controlState.attack2Queued = false;
-}
-
-function makeRoomCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
-}
-
-function copyText(text) {
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).catch(() => {});
-  }
 }
 
 function applyControlStateToFighter(fighter, controlState) {
@@ -204,6 +195,7 @@ function getOnlineApiUrl() {
 
 function buildOnlineApiPayload(payload) {
   const type = String(payload?.type || '');
+  if (type === 'play') return { action: 'play', choice: payload.choice || null };
   if (type === 'create') return { action: 'create', choice: payload.choice || null };
   if (type === 'join') return { action: 'join', roomId: payload.roomId, choice: payload.choice || null };
   if (type === 'input') return { action: 'input', roomId: payload.roomId, sessionId: payload.sessionId, controls: { pressed: payload.pressed || {} } };
@@ -268,37 +260,33 @@ function sendOnlineMessage(payload) {
     void postOnlineAction(payload)
       .then((data) => {
         const type = String(payload?.type || '');
-        if (type === 'create') {
-          setupOnlineSession(data.roomId || makeRoomCode(), 'host', data.sessionId || createClientId());
+        if (type === 'play') {
+          const role = data.role === 'guest' ? 'guest' : 'host';
+          setupOnlineSession(String(data.roomId || ''), role, data.sessionId || createClientId());
           state.playerRoundWins = 0;
           state.cpuRoundWins = 0;
           state.round = 1;
           state.gameOver = false;
           state.running = false;
-          dom.roomCode.textContent = state.online.roomId;
-          dom.copyRoomCodeBtn.disabled = false;
-          setRoomStatus(`Sala ${state.online.roomId} criada. Aguardando outro jogador...`);
+          if (role === 'host') {
+            setRoomStatus('Buscando oponente... aguardando conexao.');
+          } else {
+            if (data.hostChoice && !state.playerChoice) {
+              state.playerChoice = { ...data.hostChoice };
+            }
+            state.cpuChoice = state.cpuChoice || { ...state.online.localChoice };
+            setRoomStatus('Oponente encontrado. Conectando partida...');
+          }
           dom.startFightBtn.disabled = true;
-          dom.joinRoomBtn.disabled = true;
-          dom.roomCodeInput.value = '';
-          copyText(state.online.roomId);
-          return;
-        }
-        if (type === 'join') {
-          setupOnlineSession(String(payload.roomId || ''), 'guest', data.sessionId || createClientId());
-          state.cpuChoice = state.cpuChoice || { ...state.online.localChoice };
-          setRoomStatus(`Conectando na sala ${state.online.roomId}...`);
-          dom.roomCode.textContent = state.online.roomId;
-          dom.copyRoomCodeBtn.disabled = false;
-          dom.startFightBtn.disabled = true;
-          dom.joinRoomBtn.disabled = true;
+          if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
+          if (dom.roomCodeInput) dom.roomCodeInput.value = '';
         }
       })
       .catch((error) => {
         if (state.mode === 'online') {
-          if (!state.online.roomId && ['create', 'join'].includes(String(payload?.type || ''))) {
+          if (!state.online.roomId && String(payload?.type || '') === 'play') {
             dom.startFightBtn.disabled = !state.selectedCharacterId;
-            dom.joinRoomBtn.disabled = false;
+            if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = false;
           }
           setRoomStatus(error?.message || 'Nao foi possivel comunicar com o servidor.');
         }
@@ -329,19 +317,16 @@ function handleOnlineMessage(payload) {
     return;
   }
   if (payload.type === 'created') {
-    setupOnlineSession(payload.roomId || makeRoomCode(), 'host', payload.sessionId || createClientId());
+    setupOnlineSession(payload.roomId || '', 'host', payload.sessionId || createClientId());
     state.playerRoundWins = 0;
     state.cpuRoundWins = 0;
     state.round = 1;
     state.gameOver = false;
     state.running = false;
-    dom.roomCode.textContent = state.online.roomId;
-    dom.copyRoomCodeBtn.disabled = false;
-    setRoomStatus(`Sala ${state.online.roomId} criada. Aguardando outro jogador...`);
+    setRoomStatus('Buscando oponente... aguardando conexao.');
     dom.startFightBtn.disabled = true;
-    dom.joinRoomBtn.disabled = true;
-    dom.roomCodeInput.value = '';
-    copyText(state.online.roomId);
+    if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
+    if (dom.roomCodeInput) dom.roomCodeInput.value = '';
     return;
   }
   if (payload.type === 'joined') {
@@ -350,11 +335,9 @@ function handleOnlineMessage(payload) {
       state.playerChoice = { ...payload.hostChoice };
     }
     state.cpuChoice = state.cpuChoice || { ...state.online.localChoice };
-    setRoomStatus(`Conectando na sala ${state.online.roomId}...`);
-    dom.roomCode.textContent = state.online.roomId;
-    dom.copyRoomCodeBtn.disabled = false;
+    setRoomStatus('Oponente encontrado. Conectando partida...');
     dom.startFightBtn.disabled = true;
-    dom.joinRoomBtn.disabled = true;
+    if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
     return;
   }
   if (payload.type === 'peer-joined' && state.online.role === 'host' && !state.online.connected) {
@@ -372,7 +355,7 @@ function handleOnlineMessage(payload) {
   }
   if (payload.type === 'peer-left' && state.online.role === 'host') {
     state.online.connected = false;
-    setRoomStatus('Oponente desconectou da sala.');
+    setRoomStatus('Oponente desconectou.');
     return;
   }
   if (payload.type === 'guest-input' && state.online.role === 'host' && state.online.remoteControls) {
@@ -451,8 +434,11 @@ function ensureOnlineSocket() {
   });
 }
 
-function sendLocalInput() {
+function sendLocalInput(force = false) {
   if (state.mode !== 'online' || state.online.role !== 'guest') return;
+  const now = Date.now();
+  if (!force && now - state.online.lastInputPushAt < ONLINE_INPUT_PUSH_INTERVAL_MS) return;
+  state.online.lastInputPushAt = now;
   sendOnlineMessage({
     type: 'input',
     roomId: state.online.roomId,
@@ -573,16 +559,14 @@ function refreshModeUi() {
   dom.modeCpuBtn.classList.toggle('active', !onlineMode);
   dom.modeOnlineBtn.classList.toggle('active', onlineMode);
   dom.onlinePanel.classList.toggle('hidden', !onlineMode);
-  dom.startFightBtn.textContent = onlineMode ? 'Criar sala' : 'Iniciar Luta';
-  dom.joinRoomBtn.disabled = !onlineMode;
-  dom.copyRoomCodeBtn.disabled = !state.online.roomId;
-  if (!state.online.roomId) {
-    dom.roomCode.textContent = '-';
-    dom.roomCodeInput.value = '';
-  }
+  dom.startFightBtn.textContent = onlineMode ? 'Jogar Online' : 'Iniciar Luta';
+  if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = !onlineMode;
+  if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.disabled = true;
+  if (dom.roomCode && !state.online.roomId) dom.roomCode.textContent = '-';
+  if (dom.roomCodeInput && !state.online.roomId) dom.roomCodeInput.value = '';
   if (!onlineMode) {
-    setRoomStatus('Escolha um lutador e crie uma sala, ou entre em uma sala existente.');
-    dom.copyRoomCodeBtn.disabled = true;
+    setRoomStatus('Escolha um lutador e clique em Jogar Online para entrar na fila.');
+    if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.disabled = true;
   }
 }
 
@@ -595,7 +579,7 @@ function setMode(mode) {
   dom.startFightBtn.disabled = true;
   refreshModeUi();
   if (mode === 'online') {
-    setRoomStatus('Escolha um lutador e crie uma sala, ou entre em uma sala existente.');
+    setRoomStatus('Escolha um lutador e clique em Jogar Online para entrar na fila.');
   }
 }
 
@@ -781,18 +765,8 @@ function setupOnlineSession(roomId, role, sessionId) {
   state.online.remoteControls = createControlState();
   state.online.latestSnapshot = null;
   state.online.lastStatePushAt = 0;
+  state.online.lastInputPushAt = 0;
   state.online.lastCommandId = 0;
-  state.online.connectionTimeoutId = window.setTimeout(() => {
-    if (state.online.roomId !== roomId || state.online.role !== role || state.online.connected) return;
-    closeOnlineTransport();
-    refreshModeUi();
-    dom.startFightBtn.disabled = !state.selectedCharacterId;
-    setRoomStatus(
-      role === 'host'
-        ? `Nenhum jogador entrou na sala ${roomId} em tempo.`
-        : `Nao recebi resposta da sala ${roomId} em tempo.`
-    );
-  }, ONLINE_CONNECTION_TIMEOUT_MS);
   if (state.online.transport === 'api') {
     state.online.pollIntervalId = window.setInterval(() => {
       void pollOnlineRoom();
@@ -831,6 +805,7 @@ function closeOnlineTransport(closeSocket = true) {
   state.online.statePushInFlight = false;
   state.online.statePushDirty = false;
   state.online.pendingSnapshot = null;
+  state.online.lastInputPushAt = 0;
 }
 
 async function pollOnlineRoom() {
@@ -1129,6 +1104,7 @@ function updateRoundState() {
 function tick() {
   if (!state.running) return;
   if (state.mode === 'online' && state.online.role === 'guest') {
+    sendLocalInput();
     drawArena();
     if (state.online.latestSnapshot) {
       applyMatchSnapshot(state.online.latestSnapshot);
@@ -1240,14 +1216,14 @@ async function beginFight() {
     await ensureOnlineSocket();
     state.playerChoice = { ...selected };
     sendOnlineMessage({
-      type: 'create',
+      type: 'play',
       choice: state.online.localChoice
     });
-    setRoomStatus('Criando sala...');
+    setRoomStatus('Buscando oponente...');
     dom.startFightBtn.disabled = true;
-    dom.joinRoomBtn.disabled = true;
+    if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
   } catch (error) {
-    setRoomStatus(error?.message || 'Nao foi possivel criar a sala online.');
+    setRoomStatus(error?.message || 'Nao foi possivel entrar na fila online.');
   }
 }
 
@@ -1278,31 +1254,6 @@ function resetToSelect() {
   dom.startFightBtn.disabled = !state.selectedCharacterId;
 }
 
-async function joinOnlineRoom() {
-  const roomId = dom.roomCodeInput.value.trim().toUpperCase();
-  const selected = characters.find((c) => c.id === state.selectedCharacterId);
-  if (!roomId || !selected || state.mode !== 'online' || state.running || state.online.roomId || state.online.role) return;
-  if (!canUseOnlineTransport()) {
-    setRoomStatus('Multiplayer exige HTTP/HTTPS.');
-    return;
-  }
-  state.online.localChoice = { ...selected };
-  try {
-    await ensureOnlineSocket();
-    state.cpuChoice = { ...state.online.localChoice };
-    sendOnlineMessage({
-      type: 'join',
-      roomId,
-      choice: state.online.localChoice
-    });
-    setRoomStatus(`Conectando na sala ${roomId}...`);
-    dom.startFightBtn.disabled = true;
-    dom.joinRoomBtn.disabled = true;
-  } catch (error) {
-    setRoomStatus(error?.message || `Nao foi possivel entrar na sala ${roomId}.`);
-  }
-}
-
 window.addEventListener('keydown', (event) => {
   if (!state.running || state.roundOver || state.gameOver) return;
   if (state.mode === 'online') {
@@ -1318,7 +1269,7 @@ window.addEventListener('keydown', (event) => {
           command
         });
       }
-      sendLocalInput();
+      sendLocalInput(true);
     }
     if (event.code === 'KeyW' || event.code === 'KeyJ' || event.code === 'KeyK') event.preventDefault();
     return;
@@ -1330,7 +1281,7 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => {
   if (state.mode === 'online') {
     updateControlState(state.online.localControls, event.code, false);
-    if (state.online.role === 'guest') sendLocalInput();
+    if (state.online.role === 'guest') sendLocalInput(true);
     return;
   }
   updateControlState(state.localControls, event.code, false);
@@ -1339,13 +1290,11 @@ window.addEventListener('keyup', (event) => {
 dom.modeCpuBtn.addEventListener('click', () => setMode('cpu'));
 dom.modeOnlineBtn.addEventListener('click', () => setMode('online'));
 dom.startFightBtn.addEventListener('click', beginFight);
-dom.joinRoomBtn.addEventListener('click', joinOnlineRoom);
 dom.backSelectBtn.addEventListener('click', resetToSelect);
-dom.copyRoomCodeBtn.addEventListener('click', () => {
-  if (dom.roomCode.textContent && dom.roomCode.textContent !== '-') {
-    copyText(dom.roomCode.textContent);
-  }
-});
+if (dom.joinRoomBtn) dom.joinRoomBtn.classList.add('hidden');
+if (dom.roomCodeInput) dom.roomCodeInput.classList.add('hidden');
+if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.classList.add('hidden');
+if (dom.roomCode) dom.roomCode.textContent = '-';
 
 buildCharacterSelect();
 refreshModeUi();

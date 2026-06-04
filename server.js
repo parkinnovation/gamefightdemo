@@ -63,6 +63,17 @@ function validateSession(room, ws, role, sessionId) {
   return false;
 }
 
+function findWaitingRoom(excludeSocket) {
+  for (const room of rooms.values()) {
+    const hostReady = room.hostSocket && room.hostSocket.readyState === WebSocket.OPEN;
+    const guestMissing = !room.guestSocket || room.guestSocket.readyState !== WebSocket.OPEN;
+    if (hostReady && guestMissing && room.hostSocket !== excludeSocket && room.expiresAt >= now()) {
+      return room;
+    }
+  }
+  return null;
+}
+
 function isStaticSafe(filePath) {
   return filePath.startsWith(process.cwd());
 }
@@ -114,6 +125,55 @@ wss.on('connection', (ws) => {
     }
 
     const type = String(message?.type || '');
+
+    if (type === 'play') {
+      const waitingRoom = findWaitingRoom(ws);
+      if (!waitingRoom) {
+        let roomId = makeRoomId();
+        while (rooms.has(roomId)) roomId = makeRoomId();
+        const sessionId = makeSessionId();
+        const room = {
+          id: roomId,
+          createdAt: now(),
+          updatedAt: now(),
+          expiresAt: now() + ROOM_TTL_MS,
+          hostSocket: ws,
+          guestSocket: null,
+          hostSessionId: sessionId,
+          guestSessionId: null,
+          hostChoice: message.choice || null,
+          guestChoice: null
+        };
+        rooms.set(roomId, room);
+        ws._roomId = roomId;
+        ws._role = 'host';
+        ws._sessionId = sessionId;
+        send(ws, { type: 'created', roomId, sessionId });
+        return;
+      }
+
+      const roomId = waitingRoom.id;
+      const sessionId = makeSessionId();
+      waitingRoom.guestSocket = ws;
+      waitingRoom.guestSessionId = sessionId;
+      waitingRoom.guestChoice = message.choice || null;
+      touchRoom(waitingRoom);
+      ws._roomId = roomId;
+      ws._role = 'guest';
+      ws._sessionId = sessionId;
+      send(ws, {
+        type: 'joined',
+        roomId,
+        sessionId,
+        hostChoice: waitingRoom.hostChoice || null
+      });
+      send(waitingRoom.hostSocket, {
+        type: 'peer-joined',
+        guestChoice: waitingRoom.guestChoice || null,
+        roomId
+      });
+      return;
+    }
 
     if (type === 'create') {
       let roomId = makeRoomId();
