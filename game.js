@@ -4,7 +4,7 @@ const GROUND_Y = 530;
 const GRAVITY = 0.95;
 const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
-const ASSET_ROOT_CANDIDATES = ['/assets', 'assets', './assets', '/ASSETSGAME', '/AssetsGame', 'ASSETSGAME', 'AssetsGame'];
+const ASSET_ROOT_CANDIDATES = ['/AssetsGame', 'AssetsGame'];
 const FRAME_COUNT = 12;
 
 const characters = [
@@ -93,7 +93,7 @@ function getActionCandidates(action) {
 }
 
 function getActionAssetCandidates(folder, action) {
-  return getActionCandidates(action).flatMap((name) => getAssetCandidates(folder, `${name}.png`).concat(getAssetCandidates(folder, `${name}.PNG`)));
+  return getActionCandidates(action).flatMap((name) => getAssetCandidates(folder, `${name}.png`));
 }
 
 function getActionAssetCandidatesForCharacter(character, action) {
