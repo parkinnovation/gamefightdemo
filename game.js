@@ -253,6 +253,9 @@ async function fetchOnlineRoomState() {
   const response = await fetch(`${getOnlineApiUrl()}?${params.toString()}`, {
     cache: 'no-store'
   });
+  if (response.status === 404) {
+    return null;
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
     throw new Error(data.error || 'Falha na comunicacao com o servidor.');
