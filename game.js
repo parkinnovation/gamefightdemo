@@ -33,6 +33,10 @@ const state = {
     roomId: '',
     role: null,
     channel: null,
+    transportType: null,
+    transportListener: null,
+    transportKey: '',
+    clientId: '',
     connected: false,
     localChoice: null,
     remoteChoice: null,
@@ -161,6 +165,15 @@ function setRoomStatus(message) {
   if (dom.roomStatus) dom.roomStatus.textContent = message;
 }
 
+function createClientId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function canUseOnlineTransport() {
+  return window.location.protocol !== 'file:';
+}
+
 function updateControlState(controlState, code, isDown) {
   if (!controlState) return;
   if (code === 'KeyA' || code === 'KeyD') {
@@ -180,7 +193,7 @@ function updateControlState(controlState, code, isDown) {
 function sendLocalInput() {
   if (state.mode !== 'online' || state.online.role !== 'guest') return;
   const payload = {
-    pressed: { ...state.localControls.pressed }
+    pressed: { ...state.online.localControls.pressed }
   };
   sendOnlineMessage({
     type: 'input',
@@ -477,14 +490,13 @@ function setupOnlineTransport(roomId, role) {
   closeOnlineTransport();
   state.online.roomId = roomId;
   state.online.role = role;
+  state.online.clientId = createClientId();
   state.online.connected = false;
   state.online.localControls = createControlState();
   state.online.remoteControls = createControlState();
   state.online.latestSnapshot = null;
-  const channelName = `gamefight-room-${roomId}`;
-  state.online.channel = new BroadcastChannel(channelName);
-  state.online.channel.onmessage = (event) => {
-    const data = event.data || {};
+
+  const handleOnlineMessage = (data = {}) => {
     if (data.roomId !== state.online.roomId) return;
     if (data.type === 'join-request' && state.online.role === 'host') {
       state.online.remoteChoice = data.choice;
@@ -522,13 +534,43 @@ function setupOnlineTransport(roomId, role) {
       state.online.latestSnapshot = data.snapshot || null;
     }
   };
+
+  state.online.transportKey = `gamefight-room-${roomId}`;
+  if (typeof BroadcastChannel !== 'undefined') {
+    state.online.transportType = 'broadcast';
+    state.online.channel = new BroadcastChannel(state.online.transportKey);
+    state.online.channel.onmessage = (event) => {
+      handleOnlineMessage(event.data || {});
+    };
+    return;
+  }
+
+  state.online.transportType = 'storage';
+  state.online.transportListener = (event) => {
+    if (event.key !== state.online.transportKey || !event.newValue) return;
+    try {
+      const payload = JSON.parse(event.newValue);
+      if (payload.clientId === state.online.clientId) return;
+      handleOnlineMessage(payload);
+    } catch {
+      // Ignore malformed cross-tab payloads.
+    }
+  };
+  window.addEventListener('storage', state.online.transportListener);
 }
 
 function closeOnlineTransport() {
   if (state.online.channel) {
     state.online.channel.close();
   }
+  if (state.online.transportListener) {
+    window.removeEventListener('storage', state.online.transportListener);
+  }
   state.online.channel = null;
+  state.online.transportType = null;
+  state.online.transportListener = null;
+  state.online.transportKey = '';
+  state.online.clientId = '';
   state.online.roomId = '';
   state.online.role = null;
   state.online.connected = false;
@@ -540,8 +582,26 @@ function closeOnlineTransport() {
 }
 
 function sendOnlineMessage(message) {
-  if (!state.online.channel || !state.online.roomId) return;
-  state.online.channel.postMessage({ roomId: state.online.roomId, ...message });
+  if (!state.online.roomId) return;
+  const payload = {
+    roomId: state.online.roomId,
+    clientId: state.online.clientId,
+    messageId: createClientId(),
+    ...message
+  };
+  if (state.online.transportType === 'broadcast') {
+    if (!state.online.channel) return;
+    state.online.channel.postMessage(payload);
+    return;
+  }
+  if (state.online.transportType === 'storage') {
+    try {
+      localStorage.setItem(state.online.transportKey, JSON.stringify(payload));
+      localStorage.removeItem(state.online.transportKey);
+    } catch {
+      // Ignore storage transport failures silently.
+    }
+  }
 }
 
 function broadcastMatchState() {
@@ -847,6 +907,10 @@ function beginFight() {
   if (state.running || state.online.roomId || state.online.role) {
     return;
   }
+  if (!canUseOnlineTransport()) {
+    setRoomStatus('Multiplayer exige HTTP/HTTPS na mesma origem dos dois jogadores. Nao funciona em file://.');
+    return;
+  }
   state.online.localChoice = { ...selected };
   const roomId = makeRoomCode();
   setupOnlineTransport(roomId, 'host');
@@ -888,6 +952,10 @@ function joinOnlineRoom() {
   const roomId = dom.roomCodeInput.value.trim().toUpperCase();
   const selected = characters.find((c) => c.id === state.selectedCharacterId);
   if (!roomId || !selected || state.mode !== 'online' || state.running || state.online.roomId || state.online.role) return;
+  if (!canUseOnlineTransport()) {
+    setRoomStatus('Multiplayer exige HTTP/HTTPS na mesma origem dos dois jogadores. Nao funciona em file://.');
+    return;
+  }
   state.online.localChoice = { ...selected };
   setupOnlineTransport(roomId, 'guest');
   setRoomStatus(`Conectando na sala ${roomId}...`);
@@ -904,7 +972,7 @@ function joinOnlineRoom() {
 window.addEventListener('keydown', (event) => {
   if (!state.running || state.roundOver || state.gameOver) return;
   if (state.mode === 'online' && state.online.role === 'guest') {
-    updateControlState(state.localControls, event.code, true);
+    updateControlState(state.online.localControls, event.code, true);
     if (event.code === 'KeyW' || event.code === 'KeyJ' || event.code === 'KeyK') event.preventDefault();
     if (event.code === 'KeyW') sendOnlineMessage({ type: 'command', command: 'jump' });
     if (event.code === 'KeyJ') sendOnlineMessage({ type: 'command', command: 'attack1' });
@@ -917,7 +985,7 @@ window.addEventListener('keydown', (event) => {
 });
 
 window.addEventListener('keyup', (event) => {
-  updateControlState(state.localControls, event.code, false);
+  updateControlState(state.mode === 'online' && state.online.role === 'guest' ? state.online.localControls : state.localControls, event.code, false);
   if (state.mode === 'online' && state.online.role === 'guest') {
     sendLocalInput();
   }
