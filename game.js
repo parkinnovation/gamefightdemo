@@ -92,8 +92,13 @@ function getActionCandidates(action) {
   return ACTION_ASSET_CANDIDATES[action] || [action];
 }
 
+function getActionFileNameCandidates(name) {
+  const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
+  return capitalized === name ? [`${name}.png`] : [`${name}.png`, `${capitalized}.png`];
+}
+
 function getActionAssetCandidates(folder, action) {
-  return getActionCandidates(action).flatMap((name) => getAssetCandidates(folder, `${name}.png`));
+  return getActionCandidates(action).flatMap((name) => getActionFileNameCandidates(name).flatMap((fileName) => getAssetCandidates(folder, fileName)));
 }
 
 function getActionAssetCandidatesForCharacter(character, action) {
