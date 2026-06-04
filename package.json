@@ -1,0 +1,9 @@
+{
+  "name": "gamefightdemo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Game Fight Demo com backend Node para multiplayer online",
+  "dependencies": {
+    "@vercel/kv": "^3.0.0"
+  }
+}
