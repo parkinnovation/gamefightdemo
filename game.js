@@ -213,7 +213,11 @@ class Fighter {
     if (this.frameTick >= 6) {
       this.frameTick = 0;
       const frameCount = getSpriteForAction(this.sprites, this.currentAction)?.frameCount || FRAME_COUNT;
-      this.frameIndex = (this.frameIndex + 1) % frameCount;
+      if (this.currentAction === 'ko') {
+        this.frameIndex = Math.min(this.frameIndex + 1, frameCount - 1);
+      } else {
+        this.frameIndex = (this.frameIndex + 1) % frameCount;
+      }
     }
   }
 
