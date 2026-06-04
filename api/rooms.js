@@ -1,6 +1,7 @@
 const ROOM_TTL_SECONDS = 60 * 60 * 2;
 const ROOM_TTL_MS = ROOM_TTL_SECONDS * 1000;
 const MAX_COMMAND_BUFFER = 250;
+const WAITING_ROOM_KEY = 'match:waiting-room';
 
 let redis = null;
 try {
@@ -34,6 +35,10 @@ function makeRoomId() {
 
 function sanitizeRoomId(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+}
+
+function waitingRoomKey() {
+  return WAITING_ROOM_KEY;
 }
 
 function json(res, statusCode, payload) {
@@ -85,6 +90,34 @@ async function deleteRoom(roomId) {
     return;
   }
   memoryRooms.delete(roomId);
+}
+
+async function loadWaitingRoomId() {
+  if (redisEnabled()) {
+    return redis.get(waitingRoomKey());
+  }
+  return globalThis.__gamefightWaitingRoomId || null;
+}
+
+async function saveWaitingRoomId(roomId) {
+  if (redisEnabled()) {
+    await redis.set(waitingRoomKey(), roomId, { ex: ROOM_TTL_SECONDS });
+    return;
+  }
+  globalThis.__gamefightWaitingRoomId = roomId;
+}
+
+async function clearWaitingRoomId(roomId) {
+  if (redisEnabled()) {
+    const current = await redis.get(waitingRoomKey());
+    if (!roomId || current === roomId) {
+      await redis.del(waitingRoomKey());
+    }
+    return;
+  }
+  if (!roomId || globalThis.__gamefightWaitingRoomId === roomId) {
+    globalThis.__gamefightWaitingRoomId = null;
+  }
 }
 
 async function requireRoom(roomId, res) {
@@ -157,7 +190,32 @@ module.exports = async function handler(req, res) {
   const body = parseBody(req);
   const action = String(body.action || '');
 
-  if (action === 'create') {
+  if (action === 'play') {
+    const waitingRoomId = sanitizeRoomId(await loadWaitingRoomId());
+    if (waitingRoomId) {
+      const waitingRoom = await loadRoom(waitingRoomId);
+      const waitingRoomExpired = waitingRoom?.expiresAt && waitingRoom.expiresAt < now();
+      const waitingRoomOpen = waitingRoom && !waitingRoom.closed && !waitingRoom.guestSessionId && !waitingRoomExpired;
+      if (waitingRoomOpen) {
+        const sessionId = makeSessionId();
+        waitingRoom.guestSessionId = sessionId;
+        waitingRoom.guestChoice = body.choice || waitingRoom.guestChoice || null;
+        await saveRoom(waitingRoom);
+        await clearWaitingRoomId(waitingRoomId);
+        return json(res, 200, {
+          ok: true,
+          role: 'guest',
+          roomId: waitingRoom.id,
+          sessionId,
+          hostChoice: waitingRoom.hostChoice || null
+        });
+      }
+      await clearWaitingRoomId(waitingRoomId);
+      if (waitingRoomExpired) {
+        await deleteRoom(waitingRoomId);
+      }
+    }
+
     const roomId = makeRoomId();
     const sessionId = makeSessionId();
     const room = {
@@ -178,7 +236,8 @@ module.exports = async function handler(req, res) {
       closed: false
     };
     await saveRoom(room);
-    return json(res, 200, { ok: true, roomId, sessionId });
+    await saveWaitingRoomId(roomId);
+    return json(res, 200, { ok: true, role: 'host', roomId, sessionId });
   }
 
   const roomId = sanitizeRoomId(body.roomId);
@@ -195,6 +254,7 @@ module.exports = async function handler(req, res) {
     room.guestSessionId = nextSessionId;
     room.guestChoice = body.choice || room.guestChoice || null;
     await saveRoom(room);
+    await clearWaitingRoomId(room.id);
     return json(res, 200, { ok: true, sessionId: nextSessionId });
   }
 
@@ -246,6 +306,7 @@ module.exports = async function handler(req, res) {
     if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
     room.closed = true;
     await saveRoom(room);
+    await clearWaitingRoomId(room.id);
     await deleteRoom(roomId);
     return json(res, 200, { ok: true });
   }
