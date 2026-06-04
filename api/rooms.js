@@ -187,6 +187,7 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { ok: true, room: null });
     }
     touchPresence(room, role);
+    await saveRoom(room);
     await closeIfStale(room);
 
     if (role === 'host') {
