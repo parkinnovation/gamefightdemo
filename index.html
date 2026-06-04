@@ -14,6 +14,27 @@
     <section id="character-select" class="screen active">
       <h1>Game Fight</h1>
       <p class="subtitle">Escolha seu lutador</p>
+      <div class="mode-switch">
+        <button id="mode-cpu" class="mode-option active">Humano x CPU</button>
+        <button id="mode-online" class="mode-option">Humano x Humano</button>
+      </div>
+      <div id="online-panel" class="online-panel hidden">
+        <div class="room-card">
+          <div class="room-title">Sala online</div>
+          <p id="room-status" class="room-status">Escolha um lutador e crie uma sala, ou entre em uma sala existente.</p>
+          <div class="room-row">
+            <input id="room-code-input" class="room-input" type="text" maxlength="12" placeholder="Código da sala" />
+            <button id="join-room" class="secondary">Entrar na sala</button>
+          </div>
+          <div class="room-row room-inline">
+            <div class="room-code-wrap">
+              <span class="room-label">Código atual</span>
+              <strong id="room-code">-</strong>
+            </div>
+            <button id="copy-room-code" class="secondary" disabled>Copiar código</button>
+          </div>
+        </div>
+      </div>
       <div id="character-grid" class="character-grid"></div>
       <button id="start-fight" class="primary" disabled>Iniciar Luta</button>
       <p class="hint">Controles: A/D mover, W pular, J soco, K chute</p>

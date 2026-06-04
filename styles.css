@@ -55,6 +55,95 @@ h1 {
   color: var(--muted);
 }
 
+.mode-switch {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.mode-option {
+  background: #111827;
+  color: var(--ink);
+  border: 1px solid #334155;
+  min-width: 180px;
+}
+
+.mode-option.active {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px #22d3ee33;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.online-panel {
+  max-width: 980px;
+  margin: 0 auto 20px;
+}
+
+.room-card {
+  background: linear-gradient(180deg, #111827, #0b1220);
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 16px;
+  text-align: left;
+}
+
+.room-title {
+  font-size: 0.95rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.room-status {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
+.room-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.room-inline {
+  justify-content: space-between;
+}
+
+.room-input {
+  flex: 1 1 220px;
+  min-width: 180px;
+  border: 1px solid #334155;
+  background: #020617;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.room-input::placeholder {
+  color: #64748b;
+}
+
+.room-code-wrap {
+  display: grid;
+  gap: 4px;
+}
+
+.room-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .character-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
