@@ -9,18 +9,18 @@ Jogo de luta 1x1 com:
 
 ## O que mudou
 
-O multiplayer agora usa **WebSocket** em tempo real com backend Node (`server.js`), em vez de polling HTTP.
+O multiplayer agora usa dois caminhos:
 
-Com isso:
+- **local/dev**: `server.js` com **WebSocket** em tempo real
+- **Vercel/producao**: `api/rooms.js` com **HTTP + polling**
 
-- funciona entre navegadores diferentes
-- funciona entre maquinas/dispositivos diferentes
-- nao depende mais de abas da mesma origem
+Isso evita a tentativa de abrir `wss://gamefightdemo.vercel.app/ws` na Vercel, porque conexoes WebSocket persistentes nao sao suportadas ali.
 
 ## Arquitetura
 
 - Frontend: `index.html`, `styles.css`, `game.js`
-- Backend Node (serverless): `api/rooms.js`
+- Backend local: `server.js` com `ws`
+- Backend Vercel: `api/rooms.js`
 - Persistencia:
   - producao: Upstash Redis (`@upstash/redis`) para sincronizacao entre instancias
   - fallback local/dev: memoria em processo
@@ -31,7 +31,7 @@ Fluxo online:
 2. Guest entra na sala (`type: join`)
 3. Guest envia comandos/input (`type: command` e `type: input`)
 4. Host simula partida e envia snapshots (`type: state`)
-5. Guest renderiza snapshots recebidos pelo socket sem polling
+5. Guest renderiza snapshots via socket no modo local ou via polling HTTP na Vercel
 
 ## Estrutura de assets
 
@@ -98,12 +98,15 @@ Sem Redis, o backend cai em memoria local (nao recomendado para producao distrib
 
 ### 4) Deploy
 
-Faça o deploy normal do projeto.
+Faca o deploy normal do projeto na Vercel.
+
+Observacao: nao existe ajuste em `vercel.json` que "suba" o `/ws` na Vercel. O deploy na Vercel usa a rota serverless `api/rooms.js` e o cliente faz polling HTTP. Se quiser WebSocket de verdade em producao, suba `server.js` em outro host Node e aponte o cliente para esse servidor.
 
 ## Backend WebSocket
 
 - HTTP: arquivos estaticos em `/`
-- WebSocket: `ws://host/ws` (ou `wss://` em HTTPS)
+- WebSocket: `ws://host/ws` (ou `wss://` em HTTPS), somente quando `server.js` estiver rodando em um host Node persistente
+- Na Vercel, use `api/rooms.js` e polling HTTP em vez de `/ws`
 
 ## Observacoes importantes
 
