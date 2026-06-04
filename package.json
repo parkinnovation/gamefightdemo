@@ -3,7 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "description": "Game Fight Demo com backend Node para multiplayer online",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
   "dependencies": {
-    "@upstash/redis": "^1.32.0"
+    "@upstash/redis": "^1.32.0",
+    "ws": "^8.18.0"
   }
 }

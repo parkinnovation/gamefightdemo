@@ -9,7 +9,7 @@ Jogo de luta 1x1 com:
 
 ## O que mudou
 
-O multiplayer agora usa **backend Node** em `api/rooms.js` (Vercel Function), em vez de `BroadcastChannel/localStorage`.
+O multiplayer agora usa **WebSocket** em tempo real com backend Node (`server.js`), em vez de polling HTTP.
 
 Com isso:
 
@@ -27,11 +27,11 @@ Com isso:
 
 Fluxo online:
 
-1. Host cria sala (`action: create`)
-2. Guest entra na sala (`action: join`)
-3. Guest envia comandos/input (`action: command` e `action: input`)
-4. Host simula partida e envia snapshots (`action: state`)
-5. Guest faz polling em `/api/rooms` e renderiza snapshot
+1. Host cria sala (`type: create`)
+2. Guest entra na sala (`type: join`)
+3. Guest envia comandos/input (`type: command` e `type: input`)
+4. Host simula partida e envia snapshots (`type: state`)
+5. Guest renderiza snapshots recebidos pelo socket sem polling
 
 ## Estrutura de assets
 
@@ -64,8 +64,8 @@ Pre-requisitos:
 Passos:
 
 1. `npm install`
-2. `vercel dev`
-3. Abrir a URL mostrada no terminal
+2. `npm run dev`
+3. Abrir `http://localhost:3000`
 
 Controles:
 
@@ -100,25 +100,10 @@ Sem Redis, o backend cai em memoria local (nao recomendado para producao distrib
 
 Faça o deploy normal do projeto.
 
-## Endpoints backend
+## Backend WebSocket
 
-Rota unica: `GET/POST /api/rooms`
-
-Acoes `POST`:
-
-- `create`
-- `join`
-- `input`
-- `command`
-- `state`
-- `match-start`
-- `match-end`
-- `close`
-
-Consulta `GET`:
-
-- `?roomId=...&role=host&since=...`
-- `?roomId=...&role=guest`
+- HTTP: arquivos estaticos em `/`
+- WebSocket: `ws://host/ws` (ou `wss://` em HTTPS)
 
 ## Observacoes importantes
 
