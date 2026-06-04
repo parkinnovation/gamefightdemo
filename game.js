@@ -181,7 +181,7 @@ function isLocalDevelopmentHost() {
 }
 
 function getPreferredOnlineTransport() {
-  return isLocalDevelopmentHost() && typeof window.WebSocket === 'function' ? 'ws' : 'api';
+  return typeof window.WebSocket === 'function' ? 'ws' : null;
 }
 
 function getOnlineSocketUrl() {
@@ -256,41 +256,6 @@ async function fetchOnlineRoomState() {
 }
 
 function sendOnlineMessage(payload) {
-  if (state.online.transport === 'api') {
-    void postOnlineAction(payload)
-      .then((data) => {
-        const type = String(payload?.type || '');
-        if (type === 'play') {
-          const role = data.role === 'guest' ? 'guest' : 'host';
-          setupOnlineSession(String(data.roomId || ''), role, data.sessionId || createClientId());
-          state.playerRoundWins = 0;
-          state.cpuRoundWins = 0;
-          state.round = 1;
-          state.gameOver = false;
-          state.running = false;
-          if (role === 'host') {
-            setRoomStatus('Buscando oponente... aguardando conexao.');
-          } else {
-            state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : state.playerChoice;
-            state.cpuChoice = data.hostChoice ? { ...data.hostChoice } : state.cpuChoice;
-            setRoomStatus('Oponente encontrado. Conectando partida...');
-          }
-          dom.startFightBtn.disabled = true;
-          if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
-          if (dom.roomCodeInput) dom.roomCodeInput.value = '';
-        }
-      })
-      .catch((error) => {
-        if (state.mode === 'online') {
-          if (!state.online.roomId && String(payload?.type || '') === 'play') {
-            dom.startFightBtn.disabled = !state.selectedCharacterId;
-            if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = false;
-          }
-          setRoomStatus(error?.message || 'Nao foi possivel comunicar com o servidor.');
-        }
-      });
-    return true;
-  }
   if (!state.online.socket || state.online.socket.readyState !== WebSocket.OPEN) return false;
   state.online.socket.send(JSON.stringify(payload));
   return true;
@@ -392,8 +357,8 @@ function handleOnlineMessage(payload) {
 
 function ensureOnlineSocket() {
   state.online.transport = getPreferredOnlineTransport();
-  if (state.online.transport === 'api') {
-    return Promise.resolve();
+  if (state.online.transport !== 'ws') {
+    return Promise.reject(new Error('Este navegador nao suporta WebSocket para o modo online.'));
   }
   if (state.online.socket && (state.online.socket.readyState === WebSocket.OPEN || state.online.socket.readyState === WebSocket.CONNECTING)) {
     return Promise.resolve();
@@ -761,12 +726,6 @@ function setupOnlineSession(roomId, role, sessionId) {
   state.online.lastStatePushAt = 0;
   state.online.lastInputPushAt = 0;
   state.online.lastCommandId = 0;
-  if (state.online.transport === 'api') {
-    state.online.pollIntervalId = window.setInterval(() => {
-      void pollOnlineRoom();
-    }, ONLINE_API_POLL_INTERVAL_MS);
-    void pollOnlineRoom();
-  }
 }
 
 function closeOnlineTransport(closeSocket = true) {
