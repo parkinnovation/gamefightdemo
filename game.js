@@ -6,6 +6,7 @@ const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
 const ASSET_ROOT_CANDIDATES = ['/AssetsGame', 'AssetsGame'];
 const FRAME_COUNT = 12;
+const ONLINE_CONNECTION_TIMEOUT_MS = 10000;
 
 const characters = [
   { id: 'fighter', name: 'Fighter', folder: 'Fighter', folderCandidates: ['Fighter', 'fighter', 'character1'], color: '#38bdf8' },
@@ -37,6 +38,7 @@ const state = {
     transportListener: null,
     transportKey: '',
     clientId: '',
+    connectionTimeoutId: null,
     connected: false,
     localChoice: null,
     remoteChoice: null,
@@ -503,6 +505,10 @@ function setupOnlineTransport(roomId, role) {
       state.online.remoteChoice = data.choice;
       state.cpuChoice = { ...data.choice };
       state.online.connected = true;
+      if (state.online.connectionTimeoutId) {
+        clearTimeout(state.online.connectionTimeoutId);
+        state.online.connectionTimeoutId = null;
+      }
       state.online.roomId = roomId;
       setRoomStatus(`Oponente conectado: ${data.choice.name}. Iniciando partida...`);
       state.overlayMessage = 'OPONENTE CONECTADO';
@@ -524,6 +530,10 @@ function setupOnlineTransport(roomId, role) {
       state.playerChoice = { ...data.hostChoice };
       state.cpuChoice = { ...data.guestChoice };
       state.online.connected = true;
+      if (state.online.connectionTimeoutId) {
+        clearTimeout(state.online.connectionTimeoutId);
+        state.online.connectionTimeoutId = null;
+      }
       state.online.latestSnapshot = data.snapshot || null;
       startOnlineMatch(data.snapshot);
       return;
@@ -541,6 +551,17 @@ function setupOnlineTransport(roomId, role) {
   };
 
   state.online.transportKey = `gamefight-room-${roomId}`;
+  state.online.connectionTimeoutId = window.setTimeout(() => {
+    if (state.online.roomId !== roomId || state.online.role !== role || state.online.connected) return;
+    closeOnlineTransport();
+    refreshModeUi();
+    dom.startFightBtn.disabled = !state.selectedCharacterId;
+    setRoomStatus(
+      role === 'host'
+        ? `Nenhum jogador entrou na sala ${roomId} em tempo. Essa build so sincroniza entre abas/janelas da mesma origem.`
+        : `Nao recebi resposta da sala ${roomId} em tempo. Essa build so sincroniza entre abas/janelas da mesma origem.`
+    );
+  }, ONLINE_CONNECTION_TIMEOUT_MS);
   if (typeof BroadcastChannel !== 'undefined') {
     state.online.transportType = 'broadcast';
     state.online.channel = new BroadcastChannel(state.online.transportKey);
@@ -568,6 +589,9 @@ function closeOnlineTransport() {
   if (state.online.channel) {
     state.online.channel.close();
   }
+  if (state.online.connectionTimeoutId) {
+    clearTimeout(state.online.connectionTimeoutId);
+  }
   if (state.online.transportListener) {
     window.removeEventListener('storage', state.online.transportListener);
   }
@@ -576,6 +600,7 @@ function closeOnlineTransport() {
   state.online.transportListener = null;
   state.online.transportKey = '';
   state.online.clientId = '';
+  state.online.connectionTimeoutId = null;
   state.online.roomId = '';
   state.online.role = null;
   state.online.connected = false;

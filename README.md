@@ -53,4 +53,10 @@ Para funcionar no deploy:
 - abra os dois jogadores na mesma origem exata, incluindo protocolo, dominio e porta
 - evite colocar um jogador em um dominio/subdominio diferente do outro
 
+Observacao importante do teste em `https://gamefightdemo.vercel.app/`:
+
+- a sala so sincroniza entre abas/janelas do mesmo navegador e da mesma origem
+- se os jogadores estiverem em dispositivos ou navegadores diferentes, a conexao pode ficar em `Conectando na sala...` e expirar depois de um tempo
+- quando isso acontece, o jogo agora avisa que essa build nao tem backend/realtime externo
+
 Se a pagina for aberta diretamente do disco ou em origens diferentes, a sala nao sincroniza.
