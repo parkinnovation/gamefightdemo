@@ -4,7 +4,7 @@ const GROUND_Y = 530;
 const GRAVITY = 0.95;
 const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
-const ASSET_ROOT_CANDIDATES = ['/AssetsGame', 'AssetsGame', '/assets', 'assets'];
+const ASSET_ROOT_CANDIDATES = ['AssetsGame'];
 const FRAME_COUNT = 12;
 const ONLINE_STATE_PUSH_INTERVAL_MS = 33;
 const ONLINE_API_POLL_INTERVAL_MS = 120;
@@ -456,7 +456,7 @@ function getAssetCandidates(folder, fileName) {
 }
 
 function getCharacterCandidates(character) {
-  return character.folderCandidates || [character.folder];
+  return [character.folder];
 }
 
 function loadImageWithFallback(img, candidates, onFailure, onLoad) {
@@ -478,12 +478,12 @@ function loadImageWithFallback(img, candidates, onFailure, onLoad) {
 }
 
 function getActionCandidates(action) {
-  return ACTION_ASSET_CANDIDATES[action] || [action];
+  return [action];
 }
 
 function getActionFileNameCandidates(name) {
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
-  return capitalized === name ? [`${name}.png`] : [`${name}.png`, `${capitalized}.png`];
+  return [`${capitalized}.png`];
 }
 
 function getActionAssetCandidates(folder, action) {
