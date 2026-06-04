@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game Fight Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <section id="character-select" class="screen active">
+      <h1>Game Fight</h1>
+      <p class="subtitle">Escolha seu lutador</p>
+      <div id="character-grid" class="character-grid"></div>
+      <button id="start-fight" class="primary" disabled>Iniciar Luta</button>
+      <p class="hint">Controles: A/D mover, W pular, J soco, K chute</p>
+    </section>
+
+    <section id="fight-screen" class="screen">
+      <header class="hud">
+        <div class="player-side">
+          <div id="player-name" class="name">PLAYER</div>
+          <div class="bar"><div id="player-health" class="fill"></div></div>
+          <div class="rounds" id="player-rounds"></div>
+        </div>
+        <div class="center-info">
+          <div class="label">ROUND</div>
+          <div id="round-count" class="value">1</div>
+          <div id="timer" class="timer">60</div>
+        </div>
+        <div class="player-side right">
+          <div id="enemy-name" class="name">CPU</div>
+          <div class="bar"><div id="enemy-health" class="fill enemy"></div></div>
+          <div class="rounds" id="enemy-rounds"></div>
+        </div>
+      </header>
+
+      <div class="arena-wrap">
+        <canvas id="game-canvas" width="1200" height="620"></canvas>
+        <div id="overlay-text" class="overlay"></div>
+      </div>
+
+      <button id="back-select" class="secondary">Voltar para seleção</button>
+    </section>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
