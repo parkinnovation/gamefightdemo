@@ -840,11 +840,8 @@ async function pollOnlineRoom() {
     if (room.hostChoice && !state.cpuChoice) {
       state.cpuChoice = { ...room.hostChoice };
     }
-    if (room.matchStarted && room.latestSnapshot && !state.running) {
+    if (room.latestSnapshot && !state.running) {
       startOnlineMatch(room.latestSnapshot);
-      return;
-    }
-    if (room.matchStarted && !room.latestSnapshot) {
       return;
     }
     if (state.running && room.latestSnapshot) {
