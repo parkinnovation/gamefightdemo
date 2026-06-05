@@ -2,7 +2,7 @@ const ROOM_TTL_SECONDS = 60 * 60 * 2;
 const ROOM_TTL_MS = ROOM_TTL_SECONDS * 1000;
 const MAX_COMMAND_BUFFER = 250;
 const WAITING_ROOM_KEY = 'match:waiting-room';
-const STALE_CONNECTION_MS = 1000 * 75;
+const STALE_CONNECTION_MS = 1000 * 180;
 
 let redis = null;
 try {

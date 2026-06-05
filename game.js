@@ -921,16 +921,33 @@ async function pollOnlineRoom() {
       }
       return;
     }
+    const latestSnapshot = room.latestSnapshot || null;
+    const matchStarted = Boolean(room.matchStarted);
     state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : state.playerChoice;
     if (room.hostChoice && !state.cpuChoice) {
       state.cpuChoice = { ...room.hostChoice };
     }
-    if (room.latestSnapshot && !state.running) {
-      startOnlineMatch(room.latestSnapshot);
+    if (latestSnapshot) {
+      state.online.latestSnapshot = latestSnapshot;
+    }
+    if (!state.running && (latestSnapshot || matchStarted)) {
+      const fallbackSnapshot = latestSnapshot || {
+        playerChoice: room.hostChoice || state.cpuChoice || null,
+        cpuChoice: room.guestChoice || state.playerChoice || null,
+        round: state.round || 1,
+        timer: state.timer || ROUND_TIME,
+        playerRoundWins: 0,
+        cpuRoundWins: 0,
+        roundOver: false,
+        gameOver: false,
+        overlayMessage: ''
+      };
+      state.online.connected = true;
+      startOnlineMatch(fallbackSnapshot);
       return;
     }
-    if (state.running && room.latestSnapshot) {
-      applyMatchSnapshot(room.latestSnapshot);
+    if (state.running && latestSnapshot) {
+      applyMatchSnapshot(latestSnapshot);
     }
   } catch (error) {
     if (state.mode === 'online') {
