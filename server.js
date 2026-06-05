@@ -5,6 +5,7 @@ const { WebSocketServer, WebSocket } = require('ws');
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOM_TTL_MS = 1000 * 60 * 60 * 2;
+const WS_HEARTBEAT_INTERVAL_MS = 25000;
 const CPU_LEARNING_PATH = path.join(process.cwd(), '.cpu-learning.json');
 const rooms = new Map();
 let cpuLearningCache = null;
@@ -284,6 +285,10 @@ wss.on('connection', (ws) => {
   if (ws?._socket && typeof ws._socket.setNoDelay === 'function') {
     ws._socket.setNoDelay(true);
   }
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
   ws.on('message', (raw) => {
     let message;
     try {
@@ -499,6 +504,25 @@ wss.on('connection', (ws) => {
     }
   });
 });
+
+const heartbeatInterval = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.readyState !== WebSocket.OPEN) continue;
+    if (ws.isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    try {
+      ws.ping();
+    } catch {
+      ws.terminate();
+    }
+  }
+}, WS_HEARTBEAT_INTERVAL_MS);
+
+heartbeatInterval.unref?.();
+wss.on('close', () => clearInterval(heartbeatInterval));
 
 setInterval(() => {
   const time = now();
