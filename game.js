@@ -62,6 +62,7 @@ const state = {
     statePushInFlight: false,
     statePushDirty: false,
     pendingSnapshot: null,
+    pendingMatchStart: null,
     lastInputPushAt: 0
   },
   running: false,
@@ -626,6 +627,11 @@ function handleOnlineMessage(payload) {
     setRoomStatus('Oponente encontrado. Conectando partida...');
     dom.startFightBtn.disabled = true;
     if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
+    if (state.online.pendingMatchStart) {
+      const pendingMatchStart = state.online.pendingMatchStart;
+      state.online.pendingMatchStart = null;
+      handleOnlineMessage(pendingMatchStart);
+    }
     return;
   }
   if (payload.type === 'peer-joined' && state.online.role === 'host' && !state.online.connected) {
@@ -667,6 +673,10 @@ function handleOnlineMessage(payload) {
     if (!state.running) {
       startOnlineMatch(payload.snapshot || null);
     }
+    return;
+  }
+  if (payload.type === 'match-start') {
+    state.online.pendingMatchStart = payload;
     return;
   }
   if (payload.type === 'state' && state.online.role === 'guest') {
@@ -1156,6 +1166,7 @@ function closeOnlineTransport(closeSocket = true) {
   state.online.statePushInFlight = false;
   state.online.statePushDirty = false;
   state.online.pendingSnapshot = null;
+  state.online.pendingMatchStart = null;
   state.online.lastInputPushAt = 0;
   state.online.apiAvailable = null;
 }

@@ -232,7 +232,7 @@ module.exports = async function handler(req, res) {
     if (waitingRoomId) {
       const waitingRoom = await loadRoom(waitingRoomId);
       const waitingRoomExpired = waitingRoom?.expiresAt && waitingRoom.expiresAt < now();
-      const waitingRoomOpen = waitingRoom && !waitingRoom.closed && !waitingRoom.guestSessionId && !waitingRoomExpired;
+      const waitingRoomOpen = waitingRoom && !waitingRoom.closed && !waitingRoom.matchStarted && !waitingRoom.guestSessionId && !waitingRoomExpired;
       if (waitingRoomOpen) {
         const sessionId = makeSessionId();
         waitingRoom.guestSessionId = sessionId;
