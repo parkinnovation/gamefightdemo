@@ -69,7 +69,7 @@ function findWaitingRoom(excludeSocket) {
   for (const room of rooms.values()) {
     const hostReady = room.hostSocket && room.hostSocket.readyState === WebSocket.OPEN;
     const guestMissing = !room.guestSocket || room.guestSocket.readyState !== WebSocket.OPEN;
-    if (hostReady && guestMissing && room.hostSocket !== excludeSocket && room.expiresAt >= now()) {
+    if (hostReady && guestMissing && !room.matchStarted && room.hostSocket !== excludeSocket && room.expiresAt >= now()) {
       return room;
     }
   }
@@ -311,7 +311,9 @@ wss.on('connection', (ws) => {
           hostSessionId: sessionId,
           guestSessionId: null,
           hostChoice: message.choice || null,
-          guestChoice: null
+          guestChoice: null,
+          matchStarted: false,
+          latestSnapshot: null
         };
         rooms.set(roomId, room);
         ws._roomId = roomId;
@@ -358,7 +360,9 @@ wss.on('connection', (ws) => {
         hostSessionId: sessionId,
         guestSessionId: null,
         hostChoice: message.choice || null,
-        guestChoice: null
+        guestChoice: null,
+        matchStarted: false,
+        latestSnapshot: null
       };
       rooms.set(roomId, room);
       ws._roomId = roomId;
@@ -390,6 +394,15 @@ wss.on('connection', (ws) => {
         sessionId,
         hostChoice: room.hostChoice || null
       });
+      if (room.matchStarted) {
+        send(ws, {
+          type: 'match-start',
+          roomId,
+          hostChoice: room.hostChoice || null,
+          guestChoice: room.guestChoice || null,
+          snapshot: room.latestSnapshot || null
+        });
+      }
       send(room.hostSocket, {
         type: 'peer-joined',
         guestChoice: room.guestChoice || null,
@@ -436,8 +449,10 @@ wss.on('connection', (ws) => {
     }
 
     if (type === 'match-start' && role === 'host') {
+      room.matchStarted = true;
       room.hostChoice = message.hostChoice || room.hostChoice || null;
       room.guestChoice = message.guestChoice || room.guestChoice || null;
+      room.latestSnapshot = message.snapshot || room.latestSnapshot || null;
       send(room.guestSocket, {
         type: 'match-start',
         hostChoice: room.hostChoice,
@@ -448,6 +463,7 @@ wss.on('connection', (ws) => {
     }
 
     if (type === 'match-end' && role === 'host') {
+      room.latestSnapshot = message.snapshot || room.latestSnapshot || null;
       send(room.guestSocket, {
         type: 'match-end',
         snapshot: message.snapshot || null
