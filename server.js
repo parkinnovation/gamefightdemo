@@ -5,7 +5,9 @@ const { WebSocketServer, WebSocket } = require('ws');
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOM_TTL_MS = 1000 * 60 * 60 * 2;
+const CPU_LEARNING_PATH = path.join(process.cwd(), '.cpu-learning.json');
 const rooms = new Map();
+let cpuLearningCache = null;
 
 function now() {
   return Date.now();
@@ -97,8 +99,172 @@ function contentTypeFor(filePath) {
   return 'application/octet-stream';
 }
 
-const server = http.createServer((req, res) => {
-  const filePath = resolveAssetPath(req.url || '/');
+function sanitizeFighterId(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+}
+
+function learningKey(cpuId, opponentId) {
+  return `${cpuId}::${opponentId}`;
+}
+
+function buildEmptyLearning(cpuId, opponentId) {
+  return {
+    version: 1,
+    cpuId,
+    opponentId,
+    matches: 0,
+    wins: 0,
+    losses: 0,
+    attacks: {
+      attack1: { attempts: 0, hits: 0, totalDamage: 0 },
+      attack2: { attempts: 0, hits: 0, totalDamage: 0 }
+    },
+    responses: {},
+    sequences: {},
+    lastUpdatedAt: now()
+  };
+}
+
+function safeNumber(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return n > 0 ? n : 0;
+}
+
+function loadCpuLearningStore() {
+  if (cpuLearningCache) return cpuLearningCache;
+  try {
+    const raw = fs.readFileSync(CPU_LEARNING_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    cpuLearningCache = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    cpuLearningCache = {};
+  }
+  return cpuLearningCache;
+}
+
+function saveCpuLearningStore(store) {
+  cpuLearningCache = store;
+  fs.writeFileSync(CPU_LEARNING_PATH, JSON.stringify(store, null, 2), 'utf8');
+}
+
+function mergeCpuLearning(current, incoming) {
+  const next = current || buildEmptyLearning(incoming.cpuId, incoming.opponentId);
+  const attackKinds = ['attack1', 'attack2'];
+  const responses = incoming.responses || {};
+  const sequences = incoming.sequences || {};
+  for (const attackKind of attackKinds) {
+    if (!next.attacks[attackKind]) {
+      next.attacks[attackKind] = { attempts: 0, hits: 0, totalDamage: 0 };
+    }
+    const payload = incoming.attacks?.[attackKind] || {};
+    next.attacks[attackKind].attempts += safeNumber(payload.attempts);
+    next.attacks[attackKind].hits += safeNumber(payload.hits);
+    next.attacks[attackKind].totalDamage += safeNumber(payload.totalDamage);
+  }
+
+  for (const [enemyAction, actionStats] of Object.entries(responses)) {
+    if (!next.responses[enemyAction]) next.responses[enemyAction] = {};
+    for (const [responseAction, metrics] of Object.entries(actionStats || {})) {
+      if (!next.responses[enemyAction][responseAction]) {
+        next.responses[enemyAction][responseAction] = { count: 0, success: 0 };
+      }
+      next.responses[enemyAction][responseAction].count += safeNumber(metrics.count);
+      next.responses[enemyAction][responseAction].success += safeNumber(metrics.success);
+    }
+  }
+
+  for (const [sequenceKey, metrics] of Object.entries(sequences)) {
+    if (!next.sequences[sequenceKey]) {
+      next.sequences[sequenceKey] = { count: 0, success: 0, totalDamage: 0 };
+    }
+    next.sequences[sequenceKey].count += safeNumber(metrics.count);
+    next.sequences[sequenceKey].success += safeNumber(metrics.success);
+    next.sequences[sequenceKey].totalDamage += safeNumber(metrics.totalDamage);
+  }
+
+  next.matches += 1;
+  if (incoming.won === true) next.wins += 1;
+  if (incoming.won === false) next.losses += 1;
+  next.lastUpdatedAt = now();
+  return next;
+}
+
+function sendJson(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += String(chunk || '');
+      if (raw.length > 1024 * 1024) {
+        raw = '';
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      if (!raw) return resolve({});
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        resolve({});
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  if (requestUrl.pathname === '/api/cpu-learning') {
+    const cpuId = sanitizeFighterId(requestUrl.searchParams.get('cpuId'));
+    const opponentId = sanitizeFighterId(requestUrl.searchParams.get('opponentId'));
+    if (req.method === 'GET') {
+      if (!cpuId || !opponentId) {
+        sendJson(res, 400, { ok: false, error: 'cpuId e opponentId sao obrigatorios.' });
+        return;
+      }
+      const store = loadCpuLearningStore();
+      const key = learningKey(cpuId, opponentId);
+      const learning = store[key] || buildEmptyLearning(cpuId, opponentId);
+      sendJson(res, 200, { ok: true, learning });
+      return;
+    }
+    if (req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const bodyCpuId = sanitizeFighterId(body.cpuId);
+      const bodyOpponentId = sanitizeFighterId(body.opponentId);
+      if (!bodyCpuId || !bodyOpponentId) {
+        sendJson(res, 400, { ok: false, error: 'cpuId e opponentId sao obrigatorios.' });
+        return;
+      }
+      const store = loadCpuLearningStore();
+      const key = learningKey(bodyCpuId, bodyOpponentId);
+      const current = store[key] || buildEmptyLearning(bodyCpuId, bodyOpponentId);
+      const merged = mergeCpuLearning(current, {
+        cpuId: bodyCpuId,
+        opponentId: bodyOpponentId,
+        attacks: body.attacks || {},
+        responses: body.responses || {},
+        sequences: body.sequences || {},
+        won: body.won
+      });
+      store[key] = merged;
+      saveCpuLearningStore(store);
+      sendJson(res, 200, { ok: true, learning: merged });
+      return;
+    }
+    sendJson(res, 405, { ok: false, error: 'Metodo nao suportado.' });
+    return;
+  }
+
+  const filePath = resolveAssetPath(requestUrl.pathname || '/');
   if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not found');

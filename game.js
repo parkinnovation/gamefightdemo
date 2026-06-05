@@ -13,6 +13,7 @@ const ONLINE_DISCONNECT_RESET_MS = 1800;
 const ONLINE_POLL_ERROR_TOLERANCE = 8;
 const ONLINE_POLL_ROOM_MISS_TOLERANCE = 4;
 const ONLINE_WS_PATH = '/ws';
+const CPU_LEARNING_DECISION_TTL = 34;
 
 const characters = [
   { id: 'fighter', name: 'Fighter', folder: 'Fighter', folderCandidates: ['Fighter', 'fighter', 'character1'], color: '#38bdf8' },
@@ -76,6 +77,10 @@ const state = {
     jumpQueued: false,
     attack1Queued: false,
     attack2Queued: false
+  },
+  learning: {
+    left: null,
+    right: null
   }
 };
 
@@ -313,6 +318,227 @@ async function postOnlineAction(payload) {
     throw new Error(data.error || 'Falha na comunicacao com o servidor.');
   }
   return data;
+}
+
+function getCpuLearningApiUrl() {
+  const baseUrl = getOnlineApiBaseUrl();
+  return baseUrl ? `${baseUrl}/api/cpu-learning` : '/api/cpu-learning';
+}
+
+function createEmptyCpuLearning(cpuId, opponentId) {
+  return {
+    version: 1,
+    cpuId,
+    opponentId,
+    matches: 0,
+    wins: 0,
+    losses: 0,
+    attacks: {
+      attack1: { attempts: 0, hits: 0, totalDamage: 0 },
+      attack2: { attempts: 0, hits: 0, totalDamage: 0 }
+    },
+    responses: {},
+    sequences: {},
+    lastUpdatedAt: Date.now()
+  };
+}
+
+function normalizeEnemyAction(action) {
+  if (action === 'attack1' || action === 'attack2' || action === 'jump') return action;
+  if (action === 'walk') return 'walk';
+  return 'idle';
+}
+
+function ensureResponseBucket(bucket, enemyAction, responseAction) {
+  if (!bucket[enemyAction]) bucket[enemyAction] = {};
+  if (!bucket[enemyAction][responseAction]) bucket[enemyAction][responseAction] = { count: 0, success: 0 };
+  return bucket[enemyAction][responseAction];
+}
+
+function ensureSequenceBucket(bucket, sequenceKey) {
+  if (!bucket[sequenceKey]) bucket[sequenceKey] = { count: 0, success: 0, totalDamage: 0 };
+  return bucket[sequenceKey];
+}
+
+function createLearningRuntime(cpuId, opponentId, learning) {
+  return {
+    cpuId,
+    opponentId,
+    learning: learning || createEmptyCpuLearning(cpuId, opponentId),
+    session: {
+      attacks: {
+        attack1: { attempts: 0, hits: 0, totalDamage: 0 },
+        attack2: { attempts: 0, hits: 0, totalDamage: 0 }
+      },
+      responses: {},
+      sequences: {}
+    },
+    pendingDecisions: [],
+    lastAttack: null,
+    flushed: false
+  };
+}
+
+async function loadCpuLearning(cpuId, opponentId) {
+  try {
+    const params = new URLSearchParams({ cpuId, opponentId });
+    const response = await fetch(`${getCpuLearningApiUrl()}?${params.toString()}`, { cache: 'no-store' });
+    if (!response.ok) return createEmptyCpuLearning(cpuId, opponentId);
+    const data = await response.json().catch(() => ({}));
+    return data.learning || createEmptyCpuLearning(cpuId, opponentId);
+  } catch {
+    return createEmptyCpuLearning(cpuId, opponentId);
+  }
+}
+
+async function initializeCpuLearningContexts() {
+  state.learning.left = null;
+  state.learning.right = null;
+  if (state.mode === 'cpu') {
+    const rightLearning = await loadCpuLearning(state.cpuChoice.id, state.playerChoice.id);
+    state.learning.right = createLearningRuntime(state.cpuChoice.id, state.playerChoice.id, rightLearning);
+    return;
+  }
+  if (state.mode === 'cpu-duel') {
+    const [leftLearning, rightLearning] = await Promise.all([
+      loadCpuLearning(state.playerChoice.id, state.cpuChoice.id),
+      loadCpuLearning(state.cpuChoice.id, state.playerChoice.id)
+    ]);
+    state.learning.left = createLearningRuntime(state.playerChoice.id, state.cpuChoice.id, leftLearning);
+    state.learning.right = createLearningRuntime(state.cpuChoice.id, state.playerChoice.id, rightLearning);
+  }
+}
+
+function getLearningRuntimeForFighter(fighter) {
+  if (state.mode === 'cpu-duel') {
+    if (fighter === player) return state.learning.left;
+    if (fighter === cpu) return state.learning.right;
+    return null;
+  }
+  if (state.mode === 'cpu' && fighter === cpu) return state.learning.right;
+  return null;
+}
+
+function scoreAttackFromLearning(runtime, kind) {
+  const stats = runtime?.learning?.attacks?.[kind];
+  if (!stats) return 1;
+  const attempts = Number(stats.attempts || 0);
+  if (attempts < 3) return 1;
+  const hitRate = Number(stats.hits || 0) / attempts;
+  const avgDamage = Number(stats.totalDamage || 0) / attempts;
+  return Math.max(0.5, Math.min(1.85, 0.55 + (hitRate * 1.25) + (avgDamage / 16)));
+}
+
+function getPreferredResponseAction(runtime, enemyAction) {
+  const responseStats = runtime?.learning?.responses?.[enemyAction];
+  if (!responseStats) return null;
+  let bestAction = null;
+  let bestScore = 0;
+  for (const [action, metrics] of Object.entries(responseStats)) {
+    const count = Number(metrics?.count || 0);
+    if (count < 3) continue;
+    const successRate = Number(metrics?.success || 0) / count;
+    const score = successRate * (1 + Math.min(count, 20) / 30);
+    if (score > bestScore) {
+      bestScore = score;
+      bestAction = action;
+    }
+  }
+  return bestAction;
+}
+
+function registerAiDecision(runtime, enemyAction, responseAction) {
+  if (!runtime || !responseAction) return;
+  const bucket = ensureResponseBucket(runtime.session.responses, enemyAction, responseAction);
+  bucket.count += 1;
+  runtime.pendingDecisions.push({
+    enemyAction,
+    responseAction,
+    ttl: CPU_LEARNING_DECISION_TTL
+  });
+}
+
+function processLearningPending(runtime, fighter) {
+  if (!runtime || !fighter) return;
+  runtime.pendingDecisions = runtime.pendingDecisions.filter((decision) => {
+    if (fighter.hurtTime > 0) return false;
+    const nextTtl = decision.ttl - 1;
+    decision.ttl = nextTtl;
+    if (nextTtl <= 0) {
+      const bucket = ensureResponseBucket(runtime.session.responses, decision.enemyAction, decision.responseAction);
+      bucket.success += 1;
+      return false;
+    }
+    return true;
+  });
+}
+
+function recordAttackAttempt(runtime, enemyAction, kind) {
+  if (!runtime || (kind !== 'attack1' && kind !== 'attack2')) return;
+  runtime.session.attacks[kind].attempts += 1;
+  registerAiDecision(runtime, enemyAction, kind);
+}
+
+function recordMovementDecision(runtime, enemyAction, movement) {
+  if (!runtime || !movement) return;
+  registerAiDecision(runtime, enemyAction, movement);
+}
+
+function recordAttackHit(runtime, kind, damage) {
+  if (!runtime || (kind !== 'attack1' && kind !== 'attack2')) return;
+  runtime.session.attacks[kind].hits += 1;
+  runtime.session.attacks[kind].totalDamage += damage;
+  if (runtime.lastAttack) {
+    const sequenceKey = `${runtime.lastAttack}>${kind}`;
+    const bucket = ensureSequenceBucket(runtime.session.sequences, sequenceKey);
+    bucket.count += 1;
+    bucket.success += 1;
+    bucket.totalDamage += damage;
+  }
+  runtime.lastAttack = kind;
+}
+
+function chooseBestSequenceBoost(runtime, attackKind) {
+  const entries = Object.entries(runtime?.learning?.sequences || {});
+  if (!entries.length) return 0;
+  let best = 0;
+  for (const [key, metrics] of entries) {
+    if (!key.endsWith(`>${attackKind}`)) continue;
+    const count = Number(metrics?.count || 0);
+    if (count < 2) continue;
+    const successRate = Number(metrics?.success || 0) / count;
+    const avgDamage = Number(metrics?.totalDamage || 0) / count;
+    const score = (successRate * 0.7) + (avgDamage / 25);
+    if (score > best) best = score;
+  }
+  return Math.max(0, Math.min(0.35, best * 0.25));
+}
+
+async function flushCpuLearning(resultByCpuId) {
+  const runtimes = [state.learning.left, state.learning.right].filter((runtime) => runtime && !runtime.flushed);
+  if (!runtimes.length) return;
+  await Promise.all(runtimes.map(async (runtime) => {
+    runtime.flushed = true;
+    const won = resultByCpuId[runtime.cpuId];
+    try {
+      await fetch(getCpuLearningApiUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          cpuId: runtime.cpuId,
+          opponentId: runtime.opponentId,
+          attacks: runtime.session.attacks,
+          responses: runtime.session.responses,
+          sequences: runtime.session.sequences,
+          won
+        })
+      });
+    } catch {
+      runtime.flushed = false;
+    }
+  }));
 }
 
 async function fetchOnlineRoomState() {
@@ -692,6 +918,8 @@ function setMode(mode) {
   if (state.mode === mode) return;
   closeOnlineTransport();
   state.mode = mode;
+  state.learning.left = null;
+  state.learning.right = null;
   state.selectedCharacterId = null;
   state.selectedOpponentId = null;
   dom.characterGrid.querySelectorAll('.character-card').forEach((card) => card.classList.remove('selected'));
@@ -1268,17 +1496,66 @@ function cpuAI() {
   if (!state.running || state.roundOver || state.gameOver) return;
   const runAi = (fighter, target) => {
     if (!fighter || !target) return;
+    const runtime = getLearningRuntimeForFighter(fighter);
+    processLearningPending(runtime, fighter);
     if (!fighter.canAct()) {
       fighter.vx = 0;
       return;
     }
     const dist = target.x - fighter.x;
     const absDist = Math.abs(dist);
-    if (absDist > 130) fighter.vx = dist > 0 ? fighter.speed * 0.75 : -fighter.speed * 0.75;
-    else fighter.vx = (Math.random() > 0.5 ? 1 : -1) * fighter.speed * 0.35;
-    if (absDist < 150 && Math.random() < 0.05) fighter.attack('attack1');
-    if (absDist < 130 && Math.random() < 0.03) fighter.attack('attack2');
-    if (Math.random() < 0.008) fighter.jump();
+    const enemyAction = normalizeEnemyAction(target.currentAction);
+    const preferredResponse = getPreferredResponseAction(runtime, enemyAction);
+    let responseMove = 'idle';
+
+    if (absDist > 130 || preferredResponse === 'advance') {
+      fighter.vx = dist > 0 ? fighter.speed * 0.75 : -fighter.speed * 0.75;
+      responseMove = 'advance';
+    } else if (preferredResponse === 'retreat') {
+      fighter.vx = dist > 0 ? -fighter.speed * 0.6 : fighter.speed * 0.6;
+      responseMove = 'retreat';
+    } else {
+      fighter.vx = (Math.random() > 0.5 ? 1 : -1) * fighter.speed * 0.35;
+      responseMove = fighter.vx === 0 ? 'idle' : 'walk';
+    }
+    if (responseMove === 'advance' || responseMove === 'retreat') {
+      recordMovementDecision(runtime, enemyAction, responseMove);
+    }
+
+    let jumpChance = 0.008;
+    if (preferredResponse === 'jump') jumpChance += 0.03;
+    if (Math.random() < jumpChance) {
+      fighter.jump();
+      registerAiDecision(runtime, enemyAction, 'jump');
+    }
+
+    const attack1Boost = scoreAttackFromLearning(runtime, 'attack1');
+    const attack2Boost = scoreAttackFromLearning(runtime, 'attack2');
+    let chance1 = absDist < 150 ? 0.05 : 0;
+    let chance2 = absDist < 130 ? 0.03 : 0;
+    chance1 *= attack1Boost;
+    chance2 *= attack2Boost;
+    chance1 += chooseBestSequenceBoost(runtime, 'attack1');
+    chance2 += chooseBestSequenceBoost(runtime, 'attack2');
+    if (preferredResponse === 'attack1') chance1 += 0.035;
+    if (preferredResponse === 'attack2') chance2 += 0.035;
+    chance1 = Math.min(0.32, Math.max(0, chance1));
+    chance2 = Math.min(0.28, Math.max(0, chance2));
+
+    if (chance1 > 0 && Math.random() < chance1) {
+      const previousAttackTime = fighter.attackTime;
+      fighter.attack('attack1');
+      if (fighter.attackTime > previousAttackTime) {
+        recordAttackAttempt(runtime, enemyAction, 'attack1');
+      }
+    }
+    if (chance2 > 0 && Math.random() < chance2) {
+      const previousAttackTime = fighter.attackTime;
+      fighter.attack('attack2');
+      if (fighter.attackTime > previousAttackTime) {
+        recordAttackAttempt(runtime, enemyAction, 'attack2');
+      }
+    }
   };
   if (state.mode === 'cpu-duel') {
     runAi(player, cpu);
@@ -1297,11 +1574,13 @@ function resolveAttacks() {
     const damage = player.attackKind === 'attack2' ? 12 : 8;
     cpu.damage(damage);
     cpu.vx += player.faceRight ? 6 : -6;
+    recordAttackHit(getLearningRuntimeForFighter(player), player.attackKind, damage);
   }
   if (cpu.attackTime >= 10 && pixelMasksIntersect(cpuMask, playerMask) && player.hurtTime <= 0) {
     const damage = cpu.attackKind === 'attack2' ? 12 : 8;
     player.damage(damage);
     player.vx += cpu.faceRight ? 6 : -6;
+    recordAttackHit(getLearningRuntimeForFighter(cpu), cpu.attackKind, damage);
   }
 }
 
@@ -1352,6 +1631,16 @@ function updateRoundState() {
     if (state.playerRoundWins >= MAX_ROUNDS || state.cpuRoundWins >= MAX_ROUNDS) {
       state.gameOver = true;
       state.overlayMessage = getMatchEndText();
+      if (state.mode === 'cpu' || state.mode === 'cpu-duel') {
+        const resultByCpuId = {};
+        if (state.mode === 'cpu') {
+          resultByCpuId[state.cpuChoice.id] = state.cpuRoundWins > state.playerRoundWins;
+        } else {
+          resultByCpuId[state.playerChoice.id] = state.playerRoundWins > state.cpuRoundWins;
+          resultByCpuId[state.cpuChoice.id] = state.cpuRoundWins > state.playerRoundWins;
+        }
+        void flushCpuLearning(resultByCpuId);
+      }
       clearInterval(timerInterval);
       const snapshotPayload = buildMatchSnapshot();
       sendOnlineMessage({
@@ -1470,6 +1759,7 @@ async function beginFight() {
     state.cpuRoundWins = 0;
     state.round = 1;
     state.gameOver = false;
+    await initializeCpuLearningContexts();
     state.running = true;
     dom.selectScreen.classList.remove('active');
     dom.fightScreen.classList.add('active');
@@ -1486,6 +1776,7 @@ async function beginFight() {
     state.cpuRoundWins = 0;
     state.round = 1;
     state.gameOver = false;
+    await initializeCpuLearningContexts();
     state.running = true;
     dom.selectScreen.classList.remove('active');
     dom.fightScreen.classList.add('active');
@@ -1567,6 +1858,8 @@ function resetToSelect() {
   };
   clearControlState(state.online.localControls || createControlState());
   clearControlState(state.online.remoteControls || createControlState());
+  state.learning.left = null;
+  state.learning.right = null;
   state.overlayMessage = '';
   closeOnlineTransport();
   refreshModeUi();
