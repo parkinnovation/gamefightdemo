@@ -1142,6 +1142,93 @@ function intersects(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
+function getFighterRenderRect(fighter) {
+  const hb = fighter.hitbox;
+  return {
+    x: Math.round(hb.x - 35),
+    y: Math.round(hb.y - 30),
+    w: Math.round(hb.w + 70),
+    h: Math.round(hb.h + 30)
+  };
+}
+
+function getFighterPixelMask(fighter) {
+  const sprite = getSpriteForAction(fighter.sprites, fighter.currentAction);
+  if (!sprite?.image.complete || sprite.image.naturalWidth <= 0 || sprite.frameWidth <= 0 || sprite.frameHeight <= 0) {
+    return null;
+  }
+
+  const rect = getFighterRenderRect(fighter);
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = Math.max(1, rect.w);
+  maskCanvas.height = Math.max(1, rect.h);
+  const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+  if (!maskCtx) return null;
+
+  const frameIndex = Math.min(fighter.frameIndex, sprite.frameCount - 1);
+  const sx = frameIndex * sprite.frameWidth;
+
+  maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+  maskCtx.save();
+  if (!fighter.faceRight) {
+    maskCtx.translate(maskCanvas.width, 0);
+    maskCtx.scale(-1, 1);
+  }
+  maskCtx.drawImage(
+    sprite.image,
+    sx,
+    0,
+    sprite.frameWidth,
+    sprite.frameHeight,
+    0,
+    0,
+    maskCanvas.width,
+    maskCanvas.height
+  );
+  maskCtx.restore();
+
+  const pixels = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height).data;
+  const opaque = new Uint8Array(maskCanvas.width * maskCanvas.height);
+  let hasOpaquePixels = false;
+  for (let i = 0, p = 0; i < pixels.length; i += 4, p += 1) {
+    if (pixels[i + 3] > 16) {
+      opaque[p] = 1;
+      hasOpaquePixels = true;
+    }
+  }
+
+  if (!hasOpaquePixels) return null;
+  return { x: rect.x, y: rect.y, w: maskCanvas.width, h: maskCanvas.height, pixels: opaque };
+}
+
+function pixelMasksIntersect(a, b) {
+  if (!a || !b) return false;
+  const left = Math.max(a.x, b.x);
+  const right = Math.min(a.x + a.w, b.x + b.w);
+  const top = Math.max(a.y, b.y);
+  const bottom = Math.min(a.y + a.h, b.y + b.h);
+  if (left >= right || top >= bottom) return false;
+
+  const width = right - left;
+  const height = bottom - top;
+  const aOffsetX = left - a.x;
+  const aOffsetY = top - a.y;
+  const bOffsetX = left - b.x;
+  const bOffsetY = top - b.y;
+
+  for (let y = 0; y < height; y += 1) {
+    const aRow = (aOffsetY + y) * a.w;
+    const bRow = (bOffsetY + y) * b.w;
+    for (let x = 0; x < width; x += 1) {
+      if (a.pixels[aRow + aOffsetX + x] && b.pixels[bRow + bOffsetX + x]) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function drawArena() {
   const sky = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
   sky.addColorStop(0, '#334155');
@@ -1204,14 +1291,14 @@ function cpuAI() {
 
 function resolveAttacks() {
   if (state.mode === 'online' && state.online.role === 'guest') return;
-  const pAtk = player.attackBox();
-  const cAtk = cpu.attackBox();
-  if (pAtk && player.attackTime >= 10 && intersects(pAtk, cpu.hitbox) && cpu.hurtTime <= 0) {
+  const playerMask = getFighterPixelMask(player);
+  const cpuMask = getFighterPixelMask(cpu);
+  if (player.attackTime >= 10 && pixelMasksIntersect(playerMask, cpuMask) && cpu.hurtTime <= 0) {
     const damage = player.attackKind === 'attack2' ? 12 : 8;
     cpu.damage(damage);
     cpu.vx += player.faceRight ? 6 : -6;
   }
-  if (cAtk && cpu.attackTime >= 10 && intersects(cAtk, player.hitbox) && player.hurtTime <= 0) {
+  if (cpu.attackTime >= 10 && pixelMasksIntersect(cpuMask, playerMask) && player.hurtTime <= 0) {
     const damage = cpu.attackKind === 'attack2' ? 12 : 8;
     player.damage(damage);
     player.vx += cpu.faceRight ? 6 : -6;
