@@ -338,6 +338,47 @@ canvas {
   pointer-events: none;
 }
 
+.touch-controls {
+  display: none;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.touch-cluster {
+  display: grid;
+  gap: 10px;
+}
+
+.touch-cluster.movement {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.touch-cluster.actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.touch-btn {
+  min-height: 56px;
+  background: linear-gradient(180deg, #1f2937, #0f172a);
+  color: var(--ink);
+  border: 1px solid #475569;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-btn:active,
+.touch-btn.is-pressed {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px #22d3ee33;
+  transform: translateY(1px);
+}
+
+.touch-btn.wide {
+  min-height: 62px;
+}
+
 @media (max-width: 900px) {
   .hud {
     grid-template-columns: 1fr;
@@ -345,5 +386,15 @@ canvas {
 
   .player-side.right {
     text-align: left;
+  }
+}
+
+@media (pointer: coarse), (max-width: 900px) {
+  .touch-controls {
+    display: grid;
+  }
+
+  canvas {
+    max-height: 52vh;
   }
 }
