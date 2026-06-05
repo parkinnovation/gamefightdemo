@@ -34,6 +34,7 @@ const ACTION_ASSET_CANDIDATES = {
 const state = {
   mode: 'cpu',
   selectedCharacterId: null,
+  selectedOpponentId: null,
   playerChoice: null,
   cpuChoice: null,
   online: {
@@ -82,6 +83,7 @@ const dom = {
   selectScreen: document.getElementById('character-select'),
   fightScreen: document.getElementById('fight-screen'),
   modeCpuBtn: document.getElementById('mode-cpu'),
+  modeCpuDuelBtn: document.getElementById('mode-cpu-duel'),
   modeOnlineBtn: document.getElementById('mode-online'),
   onlinePanel: document.getElementById('online-panel'),
   characterGrid: document.getElementById('character-grid'),
@@ -612,28 +614,78 @@ function buildCharacterSelect() {
   dom.characterGrid.querySelectorAll('.character-card').forEach((card) => {
     card.addEventListener('click', () => {
       if (state.mode === 'online' && (state.online.roomId || state.running)) return;
-      dom.characterGrid.querySelectorAll('.character-card').forEach((c) => c.classList.remove('selected'));
-      card.classList.add('selected');
-      state.selectedCharacterId = card.dataset.charId;
-      dom.startFightBtn.disabled = false;
+      const charId = card.dataset.charId;
+      if (state.mode === 'cpu-duel') {
+        if (state.selectedCharacterId === charId) {
+          state.selectedCharacterId = null;
+        } else if (state.selectedOpponentId === charId) {
+          state.selectedOpponentId = null;
+        } else if (!state.selectedCharacterId) {
+          state.selectedCharacterId = charId;
+        } else if (!state.selectedOpponentId) {
+          state.selectedOpponentId = charId;
+        } else {
+          state.selectedOpponentId = charId;
+        }
+      } else {
+        state.selectedCharacterId = charId;
+      }
+      updateCharacterSelectionUi();
     });
   });
 }
 
+function getStartButtonLabel() {
+  if (state.mode === 'online') return 'Jogar Online';
+  if (state.mode === 'cpu-duel') return 'Iniciar CPU x CPU';
+  return 'Iniciar Luta';
+}
+
+function refreshSubtitle() {
+  const subtitle = dom.selectScreen.querySelector('.subtitle');
+  if (!subtitle) return;
+  subtitle.textContent = state.mode === 'cpu-duel'
+    ? 'Escolha dois lutadores para a luta automatica'
+    : 'Escolha seu lutador';
+}
+
+function updateCharacterSelectionUi() {
+  const duelMode = state.mode === 'cpu-duel';
+  dom.characterGrid.querySelectorAll('.character-card').forEach((card) => {
+    const charId = card.dataset.charId;
+    const primary = state.selectedCharacterId === charId;
+    const secondary = state.selectedOpponentId === charId;
+    card.classList.toggle('selected', primary || secondary);
+    card.classList.toggle('selected-player', duelMode && primary);
+    card.classList.toggle('selected-cpu', duelMode && secondary);
+    if (!duelMode) {
+      card.classList.remove('selected-player', 'selected-cpu');
+    }
+  });
+  if (state.mode === 'cpu-duel') {
+    dom.startFightBtn.disabled = !(state.selectedCharacterId && state.selectedOpponentId && state.selectedCharacterId !== state.selectedOpponentId);
+  } else {
+    dom.startFightBtn.disabled = !state.selectedCharacterId;
+  }
+}
+
 function refreshModeUi() {
   const onlineMode = state.mode === 'online';
-  dom.modeCpuBtn.classList.toggle('active', !onlineMode);
+  dom.modeCpuBtn.classList.toggle('active', state.mode === 'cpu');
+  if (dom.modeCpuDuelBtn) dom.modeCpuDuelBtn.classList.toggle('active', state.mode === 'cpu-duel');
   dom.modeOnlineBtn.classList.toggle('active', onlineMode);
   dom.onlinePanel.classList.toggle('hidden', !onlineMode);
-  dom.startFightBtn.textContent = onlineMode ? 'Jogar Online' : 'Iniciar Luta';
+  dom.startFightBtn.textContent = getStartButtonLabel();
   if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = !onlineMode;
   if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.disabled = true;
   if (dom.roomCode && !state.online.roomId) dom.roomCode.textContent = '-';
   if (dom.roomCodeInput && !state.online.roomId) dom.roomCodeInput.value = '';
+  refreshSubtitle();
   if (!onlineMode) {
     setRoomStatus('Escolha um lutador e clique em Jogar Online para entrar na fila.');
     if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.disabled = true;
   }
+  updateCharacterSelectionUi();
 }
 
 function setMode(mode) {
@@ -641,8 +693,8 @@ function setMode(mode) {
   closeOnlineTransport();
   state.mode = mode;
   state.selectedCharacterId = null;
+  state.selectedOpponentId = null;
   dom.characterGrid.querySelectorAll('.character-card').forEach((card) => card.classList.remove('selected'));
-  dom.startFightBtn.disabled = true;
   refreshModeUi();
   if (mode === 'online') {
     setRoomStatus('Escolha um lutador e clique em Jogar Online para entrar na fila.');
@@ -1120,23 +1172,34 @@ function applyPlayerInput() {
     }
     return;
   }
+  if (state.mode === 'cpu-duel') return;
   applyControlStateToFighter(player, state.localControls);
 }
 
 function cpuAI() {
   if (state.mode === 'online') return;
-  if (!state.running || state.roundOver || state.gameOver || cpu.ko) return;
-  const dist = player.x - cpu.x;
-  const absDist = Math.abs(dist);
-  if (cpu.canAct()) {
-    if (absDist > 130) cpu.vx = dist > 0 ? cpu.speed * 0.75 : -cpu.speed * 0.75;
-    else cpu.vx = (Math.random() > 0.5 ? 1 : -1) * cpu.speed * 0.35;
-    if (absDist < 150 && Math.random() < 0.05) cpu.attack('attack1');
-    if (absDist < 130 && Math.random() < 0.03) cpu.attack('attack2');
-    if (Math.random() < 0.008) cpu.jump();
-  } else {
-    cpu.vx = 0;
+  if (!state.running || state.roundOver || state.gameOver) return;
+  const runAi = (fighter, target) => {
+    if (!fighter || !target) return;
+    if (!fighter.canAct()) {
+      fighter.vx = 0;
+      return;
+    }
+    const dist = target.x - fighter.x;
+    const absDist = Math.abs(dist);
+    if (absDist > 130) fighter.vx = dist > 0 ? fighter.speed * 0.75 : -fighter.speed * 0.75;
+    else fighter.vx = (Math.random() > 0.5 ? 1 : -1) * fighter.speed * 0.35;
+    if (absDist < 150 && Math.random() < 0.05) fighter.attack('attack1');
+    if (absDist < 130 && Math.random() < 0.03) fighter.attack('attack2');
+    if (Math.random() < 0.008) fighter.jump();
+  };
+  if (state.mode === 'cpu-duel') {
+    runAi(player, cpu);
+    runAi(cpu, player);
+    return;
   }
+  if (cpu.ko) return;
+  runAi(cpu, player);
 }
 
 function resolveAttacks() {
@@ -1170,6 +1233,24 @@ function refreshHud() {
   dom.overlayText.textContent = state.overlayMessage;
 }
 
+function getRoundOverlayText(winner) {
+  if (winner === 'draw') return 'EMPATE';
+  if (state.mode === 'cpu-duel') {
+    const winningName = winner === 'player' ? state.playerChoice?.name : state.cpuChoice?.name;
+    return winningName ? `ROUND DO ${winningName.toUpperCase()}` : 'ROUND';
+  }
+  return winner === 'player' ? 'ROUND DO PLAYER' : 'ROUND DA CPU';
+}
+
+function getMatchEndText() {
+  if (state.mode === 'cpu-duel') {
+    return state.playerRoundWins > state.cpuRoundWins
+      ? `${state.playerChoice?.name?.toUpperCase() || 'LADO ESQUERDO'} VENCE!`
+      : `${state.cpuChoice?.name?.toUpperCase() || 'LADO DIREITO'} VENCE!`;
+  }
+  return state.playerRoundWins > state.cpuRoundWins ? 'VITORIA!' : 'DERROTA!';
+}
+
 function updateRoundState() {
   if (state.mode === 'online' && state.online.role === 'guest') return;
   if (state.roundOver || state.gameOver) return;
@@ -1183,7 +1264,7 @@ function updateRoundState() {
     if (winner === 'cpu') state.cpuRoundWins += 1;
     if (state.playerRoundWins >= MAX_ROUNDS || state.cpuRoundWins >= MAX_ROUNDS) {
       state.gameOver = true;
-      state.overlayMessage = state.playerRoundWins > state.cpuRoundWins ? 'VITORIA!' : 'DERROTA!';
+      state.overlayMessage = getMatchEndText();
       clearInterval(timerInterval);
       const snapshotPayload = buildMatchSnapshot();
       sendOnlineMessage({
@@ -1196,7 +1277,7 @@ function updateRoundState() {
       broadcastMatchState(true);
       return;
     }
-    state.overlayMessage = winner === 'draw' ? 'EMPATE' : winner === 'player' ? 'ROUND DO PLAYER' : 'ROUND DA CPU';
+    state.overlayMessage = getRoundOverlayText(winner);
     clearInterval(timerInterval);
     broadcastMatchState();
     setTimeout(() => {
@@ -1266,8 +1347,8 @@ function startRound(showIntro = true) {
     y: GROUND_Y,
     faceRight: false
   });
-  dom.playerName.textContent = state.playerChoice.name;
-  dom.enemyName.textContent = state.mode === 'cpu' ? `${state.cpuChoice.name} (CPU)` : state.cpuChoice.name;
+  dom.playerName.textContent = state.mode === 'online' ? state.playerChoice.name : `${state.playerChoice.name} (CPU)`;
+  dom.enemyName.textContent = state.mode === 'online' ? state.cpuChoice.name : `${state.cpuChoice.name} (CPU)`;
   if (showIntro) {
     state.overlayMessage = 'READY?';
     setTimeout(() => {
@@ -1282,7 +1363,7 @@ function startRound(showIntro = true) {
       state.overlayMessage = '';
     }, 700);
   }
-  if (state.mode === 'cpu' || state.online.role === 'host') {
+  if (state.mode === 'cpu' || state.mode === 'cpu-duel' || state.online.role === 'host') {
     startTimer();
   }
   if (state.mode === 'online' && state.online.role === 'host') {
@@ -1298,6 +1379,22 @@ async function beginFight() {
     const cpuSelected = cpuPool[Math.floor(Math.random() * cpuPool.length)];
     state.playerChoice = { ...selected };
     state.cpuChoice = { ...cpuSelected };
+    state.playerRoundWins = 0;
+    state.cpuRoundWins = 0;
+    state.round = 1;
+    state.gameOver = false;
+    state.running = true;
+    dom.selectScreen.classList.remove('active');
+    dom.fightScreen.classList.add('active');
+    startRound(true);
+    requestAnimationFrame(tick);
+    return;
+  }
+  if (state.mode === 'cpu-duel') {
+    const opponent = characters.find((c) => c.id === state.selectedOpponentId);
+    if (!selected || !opponent || selected.id === opponent.id) return;
+    state.playerChoice = { ...selected };
+    state.cpuChoice = { ...opponent };
     state.playerRoundWins = 0;
     state.cpuRoundWins = 0;
     state.round = 1;
@@ -1388,7 +1485,7 @@ function resetToSelect() {
   refreshModeUi();
   dom.fightScreen.classList.remove('active');
   dom.selectScreen.classList.add('active');
-  dom.startFightBtn.disabled = !state.selectedCharacterId;
+  updateCharacterSelectionUi();
 }
 
 window.addEventListener('keydown', (event) => {
@@ -1425,6 +1522,7 @@ window.addEventListener('keyup', (event) => {
 });
 
 dom.modeCpuBtn.addEventListener('click', () => setMode('cpu'));
+if (dom.modeCpuDuelBtn) dom.modeCpuDuelBtn.addEventListener('click', () => setMode('cpu-duel'));
 dom.modeOnlineBtn.addEventListener('click', () => setMode('online'));
 dom.startFightBtn.addEventListener('click', beginFight);
 dom.backSelectBtn.addEventListener('click', resetToSelect);
