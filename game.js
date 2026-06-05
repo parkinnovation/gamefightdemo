@@ -194,10 +194,6 @@ function isLocalDevelopmentHost() {
   return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 }
 
-function isVercelDeploymentHost() {
-  return window.location.hostname === 'gamefightdemo.vercel.app' || window.location.hostname.endsWith('.vercel.app');
-}
-
 function getPreferredOnlineTransport() {
   const candidates = getOnlineTransportCandidates();
   return candidates[0] || null;
@@ -206,7 +202,8 @@ function getPreferredOnlineTransport() {
 function getOnlineTransportCandidates() {
   if (!canUseOnlineTransport()) return [];
   const supportsWebSocket = typeof window.WebSocket === 'function';
-  const preferred = isVercelDeploymentHost() ? 'api' : 'ws';
+  // Outside local development, default to API polling for stable multiplayer.
+  const preferred = isLocalDevelopmentHost() ? 'ws' : 'api';
   const fallback = preferred === 'api' ? 'ws' : 'api';
   const candidates = [];
   if (preferred === 'ws' ? supportsWebSocket : true) candidates.push(preferred);
@@ -1338,13 +1335,13 @@ function applyMatchSnapshot(snapshot) {
 }
 
 function startOnlineMatch(snapshot) {
-  state.running = true;
-  state.roundOver = false;
-  state.gameOver = false;
   if (!snapshot) {
     state.playerChoice = state.playerChoice || { ...state.online.localChoice };
-    state.cpuChoice = state.cpuChoice || { ...state.online.remoteChoice };
+    state.cpuChoice = state.cpuChoice || (state.online.remoteChoice ? { ...state.online.remoteChoice } : null);
     if (!state.playerChoice || !state.cpuChoice) return;
+    state.running = true;
+    state.roundOver = false;
+    state.gameOver = false;
     startRound(true);
     const snapshotPayload = buildMatchSnapshot();
     sendOnlineMessage({
@@ -1358,13 +1355,17 @@ function startOnlineMatch(snapshot) {
     });
     broadcastMatchState(true);
   } else {
+    state.running = true;
+    state.roundOver = false;
+    state.gameOver = false;
     if (state.online.role === 'guest') {
       state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : (state.playerChoice || snapshot.cpuChoice);
-      state.cpuChoice = state.cpuChoice || snapshot.playerChoice || { ...state.online.remoteChoice };
+      state.cpuChoice = state.cpuChoice || snapshot.playerChoice || (state.online.remoteChoice ? { ...state.online.remoteChoice } : null);
     } else {
       state.playerChoice = state.playerChoice || snapshot.playerChoice || { ...state.online.localChoice };
-      state.cpuChoice = state.cpuChoice || snapshot.cpuChoice || { ...state.online.remoteChoice };
+      state.cpuChoice = state.cpuChoice || snapshot.cpuChoice || (state.online.remoteChoice ? { ...state.online.remoteChoice } : null);
     }
+    if (!state.playerChoice || !state.cpuChoice) return;
     startRound(false);
     applyMatchSnapshot(snapshot);
   }
