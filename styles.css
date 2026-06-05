@@ -67,7 +67,7 @@ h1 {
   background: #111827;
   color: var(--ink);
   border: 1px solid #334155;
-  min-width: 180px;
+  min-width: 160px;
 }
 
 .mode-option.active {
@@ -166,6 +166,16 @@ h1 {
   transform: translateY(-2px);
   border-color: var(--accent-2);
   box-shadow: 0 0 0 2px #22d3ee33;
+}
+
+.character-card.selected-player {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px #22d3ee55;
+}
+
+.character-card.selected-cpu {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #ef444455;
 }
 
 .character-card img,
