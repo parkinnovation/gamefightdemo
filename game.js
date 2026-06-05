@@ -109,7 +109,8 @@ const dom = {
   roundCount: document.getElementById('round-count'),
   timer: document.getElementById('timer'),
   overlayText: document.getElementById('overlay-text'),
-  canvas: document.getElementById('game-canvas')
+  canvas: document.getElementById('game-canvas'),
+  touchControls: document.getElementById('touch-controls')
 };
 
 const ctx = dom.canvas.getContext('2d');
@@ -759,6 +760,89 @@ function updateControlState(controlState, code, isDown) {
   if (isDown && code === 'KeyK') {
     controlState.attack2Queued = true;
   }
+}
+
+function isAttackControlCode(code) {
+  return code === 'KeyW' || code === 'KeyJ' || code === 'KeyK';
+}
+
+function getOnlineCommandForCode(code) {
+  if (code === 'KeyW') return 'jump';
+  if (code === 'KeyJ') return 'attack1';
+  if (code === 'KeyK') return 'attack2';
+  return null;
+}
+
+function clearTouchButtonStates() {
+  if (!dom.touchControls) return;
+  dom.touchControls.querySelectorAll('.is-pressed').forEach((button) => {
+    button.classList.remove('is-pressed');
+  });
+}
+
+function handleControlChange(code, isDown) {
+  if (state.mode === 'online') {
+    updateControlState(state.online.localControls, code, isDown);
+    if (state.online.role === 'guest') {
+      const command = isDown ? getOnlineCommandForCode(code) : null;
+      if (command) {
+        sendOnlineMessage({
+          type: 'command',
+          roomId: state.online.roomId,
+          role: state.online.role,
+          sessionId: state.online.sessionId,
+          command
+        });
+      }
+      sendLocalInput(true);
+    }
+    return;
+  }
+  updateControlState(state.localControls, code, isDown);
+}
+
+function bindTouchControls() {
+  if (!dom.touchControls) return;
+  dom.touchControls.querySelectorAll('[data-code]').forEach((button) => {
+    const code = button.dataset.code;
+    if (!code) return;
+    const pointerState = new Set();
+    const setPressed = (isDown) => {
+      button.classList.toggle('is-pressed', isDown);
+      handleControlChange(code, isDown);
+    };
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      if (pointerState.has(event.pointerId)) return;
+      pointerState.add(event.pointerId);
+      try {
+        button.setPointerCapture(event.pointerId);
+      } catch {
+        // Ignore capture failures on browsers that do not support it reliably.
+      }
+      setPressed(true);
+    });
+    const release = (event) => {
+      if (!pointerState.has(event.pointerId)) return;
+      pointerState.delete(event.pointerId);
+      try {
+        button.releasePointerCapture(event.pointerId);
+      } catch {
+        // Ignore release failures when capture was not established.
+      }
+      if (pointerState.size === 0) {
+        setPressed(false);
+      }
+    };
+    button.addEventListener('pointerup', (event) => {
+      event.preventDefault();
+      release(event);
+    });
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('lostpointercapture', (event) => {
+      release(event);
+    });
+  });
 }
 
 function getAssetCandidates(folder, fileName) {
@@ -1873,6 +1957,7 @@ function resetToSelect() {
   state.learning.left = null;
   state.learning.right = null;
   state.overlayMessage = '';
+  clearTouchButtonStates();
   closeOnlineTransport();
   refreshModeUi();
   dom.fightScreen.classList.remove('active');
@@ -1882,35 +1967,13 @@ function resetToSelect() {
 
 window.addEventListener('keydown', (event) => {
   if (!state.running || state.roundOver || state.gameOver) return;
-  if (state.mode === 'online') {
-    updateControlState(state.online.localControls, event.code, true);
-    if (state.online.role === 'guest') {
-      if (event.code === 'KeyW' || event.code === 'KeyJ' || event.code === 'KeyK') {
-        const command = event.code === 'KeyW' ? 'jump' : event.code === 'KeyJ' ? 'attack1' : 'attack2';
-        sendOnlineMessage({
-          type: 'command',
-          roomId: state.online.roomId,
-          role: state.online.role,
-          sessionId: state.online.sessionId,
-          command
-        });
-      }
-      sendLocalInput(true);
-    }
-    if (event.code === 'KeyW' || event.code === 'KeyJ' || event.code === 'KeyK') event.preventDefault();
-    return;
-  }
-  updateControlState(state.localControls, event.code, true);
-  if (event.code === 'KeyW' || event.code === 'KeyJ' || event.code === 'KeyK') event.preventDefault();
+  handleControlChange(event.code, true);
+  if (isAttackControlCode(event.code)) event.preventDefault();
 });
 
 window.addEventListener('keyup', (event) => {
-  if (state.mode === 'online') {
-    updateControlState(state.online.localControls, event.code, false);
-    if (state.online.role === 'guest') sendLocalInput(true);
-    return;
-  }
-  updateControlState(state.localControls, event.code, false);
+  if (!state.running || state.roundOver || state.gameOver) return;
+  handleControlChange(event.code, false);
 });
 
 dom.modeCpuBtn.addEventListener('click', () => setMode('cpu'));
@@ -1923,5 +1986,6 @@ if (dom.roomCodeInput) dom.roomCodeInput.classList.add('hidden');
 if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.classList.add('hidden');
 if (dom.roomCode) dom.roomCode.textContent = '-';
 
+bindTouchControls();
 buildCharacterSelect();
 refreshModeUi();
