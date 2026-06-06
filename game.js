@@ -322,9 +322,12 @@ async function postOnlineAction(payload) {
   });
   const data = await response.json().catch(() => ({}));
   if (response.status === 404) {
-    state.online.apiAvailable = false;
-    const error = new Error('O modo online nao esta disponivel neste deploy.');
-    error.code = 'ONLINE_TRANSPORT_UNAVAILABLE';
+    const isTransportProbe = body.action === 'play';
+    if (isTransportProbe) {
+      state.online.apiAvailable = false;
+    }
+    const error = new Error(isTransportProbe ? 'O modo online nao esta disponivel neste deploy.' : 'Sala online nao encontrada ou expirada.');
+    error.code = isTransportProbe ? 'ONLINE_TRANSPORT_UNAVAILABLE' : 'ONLINE_ROOM_NOT_FOUND';
     throw error;
   }
   if (!response.ok || data.ok === false) {
@@ -2020,10 +2023,11 @@ async function beginFight() {
   }
   state.online.localChoice = { ...selected };
   try {
-    const transports = getOnlineTransportCandidates();
-    if (!transports.length) {
+    const primaryTransport = await resolveOnlineTransport();
+    if (!primaryTransport) {
       throw new Error('Nao foi possivel iniciar o modo online neste navegador.');
     }
+    const transports = [primaryTransport, ...getOnlineTransportCandidates().filter((transport) => transport !== primaryTransport)];
     let lastError = null;
     for (const transport of transports) {
       try {
