@@ -19,7 +19,13 @@ const ONLINE_WS_LOG_PREFIX = '[online-ws]';
 const characters = [
   { id: 'fighter', name: 'Fighter', folder: 'Fighter', folderCandidates: ['Fighter', 'fighter', 'character1'], color: '#38bdf8' },
   { id: 'samurai', name: 'Samurai', folder: 'Samurai', folderCandidates: ['Samurai', 'samurai', 'character2'], color: '#fb7185' },
-  { id: 'shinobi', name: 'Shinobi', folder: 'Shinobi', folderCandidates: ['Shinobi', 'shinobi', 'character3'], color: '#facc15' }
+  { id: 'shinobi', name: 'Shinobi', folder: 'Shinobi', folderCandidates: ['Shinobi', 'shinobi', 'character3'], color: '#facc15' },
+  { id: 'converted-vampire', name: 'Converted Vampire', folder: 'Converted_Vampire', folderCandidates: ['Converted_Vampire'], color: '#c084fc' },
+  { id: 'countess-vampire', name: 'Countess Vampire', folder: 'Countess_Vampire', folderCandidates: ['Countess_Vampire'], color: '#f472b6' },
+  { id: 'gotoku', name: 'Gotoku', folder: 'Gotoku', folderCandidates: ['Gotoku'], color: '#fb923c' },
+  { id: 'onre', name: 'Onre', folder: 'Onre', folderCandidates: ['Onre'], color: '#34d399' },
+  { id: 'vampire-girl', name: 'Vampire Girl', folder: 'Vampire_Girl', folderCandidates: ['Vampire_Girl'], color: '#a78bfa' },
+  { id: 'yurei', name: 'Yurei', folder: 'Yurei', folderCandidates: ['Yurei'], color: '#60a5fa' }
 ];
 
 const ACTIONS = ['idle', 'walk', 'jump', 'attack1', 'attack2', 'hurt', 'ko'];
