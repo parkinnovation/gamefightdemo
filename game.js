@@ -205,10 +205,6 @@ function canUseOnlineTransport() {
   return window.location.protocol !== 'file:';
 }
 
-function isLocalDevelopmentHost() {
-  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-}
-
 function getPreferredOnlineTransport() {
   const candidates = getOnlineTransportCandidates();
   return candidates[0] || null;
@@ -217,8 +213,8 @@ function getPreferredOnlineTransport() {
 function getOnlineTransportCandidates() {
   if (!canUseOnlineTransport()) return [];
   const supportsWebSocket = typeof window.WebSocket === 'function';
-  // Outside local development, default to API polling for stable multiplayer.
-  const preferred = isLocalDevelopmentHost() ? 'ws' : 'api';
+  // Prefer WebSocket everywhere for real-time responsiveness, with API as fallback.
+  const preferred = supportsWebSocket ? 'ws' : 'api';
   const fallback = preferred === 'api' ? 'ws' : 'api';
   const candidates = [];
   if (preferred === 'ws' ? supportsWebSocket : true) candidates.push(preferred);
@@ -1900,7 +1896,13 @@ function tick() {
     drawArena();
     if (state.online.latestSnapshot) {
       applyMatchSnapshot(state.online.latestSnapshot);
+      state.online.latestSnapshot = null;
     }
+    applyPlayerInput();
+    player.updatePhysics();
+    updateFacing();
+    player.updateAnimation();
+    cpu.updateAnimation();
     player.draw();
     cpu.draw();
     refreshHud();
