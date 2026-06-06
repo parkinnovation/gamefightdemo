@@ -66,14 +66,16 @@
       </div>
 
       <div id="touch-controls" class="touch-controls" aria-label="Controles de toque">
-        <div class="touch-cluster movement">
-          <button class="touch-btn wide" data-code="KeyA" type="button">Esquerda</button>
-          <button class="touch-btn wide" data-code="KeyD" type="button">Direita</button>
+        <div class="touch-cluster movement" aria-label="Movimento">
+          <button class="touch-btn dpad-left" data-code="KeyA" type="button" aria-label="Mover para a esquerda">◀</button>
+          <button class="touch-btn dpad-right" data-code="KeyD" type="button" aria-label="Mover para a direita">▶</button>
         </div>
-        <div class="touch-cluster actions">
-          <button class="touch-btn" data-code="KeyW" type="button">Pular</button>
-          <button class="touch-btn" data-code="KeyJ" type="button">Soco</button>
-          <button class="touch-btn" data-code="KeyK" type="button">Chute</button>
+        <div class="touch-cluster actions" aria-label="Ações">
+          <button class="touch-btn action-jump" data-code="KeyW" type="button" aria-label="Pular">A</button>
+          <div class="action-row">
+            <button class="touch-btn action-hit" data-code="KeyJ" type="button" aria-label="Soco">B</button>
+            <button class="touch-btn action-kick" data-code="KeyK" type="button" aria-label="Chute">X</button>
+          </div>
         </div>
       </div>
 
