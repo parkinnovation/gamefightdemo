@@ -14,6 +14,7 @@ const ONLINE_POLL_ERROR_TOLERANCE = 8;
 const ONLINE_POLL_ROOM_MISS_TOLERANCE = 4;
 const ONLINE_WS_PATH = '/ws';
 const CPU_LEARNING_DECISION_TTL = 34;
+const ONLINE_WS_LOG_PREFIX = '[online-ws]';
 
 const characters = [
   { id: 'fighter', name: 'Fighter', folder: 'Fighter', folderCandidates: ['Fighter', 'fighter', 'character1'], color: '#38bdf8' },
@@ -117,6 +118,19 @@ const ctx = dom.canvas.getContext('2d');
 let player;
 let cpu;
 let timerInterval;
+
+function logOnlineWs(event, details = {}) {
+  console.log(ONLINE_WS_LOG_PREFIX, event, details);
+}
+
+function getSocketStateLabel(socket) {
+  if (!socket) return 'null';
+  if (socket.readyState === WebSocket.CONNECTING) return 'CONNECTING';
+  if (socket.readyState === WebSocket.OPEN) return 'OPEN';
+  if (socket.readyState === WebSocket.CLOSING) return 'CLOSING';
+  if (socket.readyState === WebSocket.CLOSED) return 'CLOSED';
+  return `UNKNOWN(${socket.readyState})`;
+}
 
 function createControlState() {
   return {
@@ -568,13 +582,33 @@ function sendOnlineMessage(payload) {
     void postOnlineAction(payload).catch(() => {});
     return true;
   }
-  if (!state.online.socket || state.online.socket.readyState !== WebSocket.OPEN) return false;
+  if (!state.online.socket || state.online.socket.readyState !== WebSocket.OPEN) {
+    logOnlineWs('send-blocked', {
+      reason: 'socket-not-open',
+      payloadType: payload?.type || null,
+      socketState: getSocketStateLabel(state.online.socket)
+    });
+    return false;
+  }
+  logOnlineWs('send', {
+    payloadType: payload?.type || null,
+    roomId: state.online.roomId || null,
+    role: state.online.role || null,
+    sessionId: state.online.sessionId || null
+  });
   state.online.socket.send(JSON.stringify(payload));
   return true;
 }
 
 function handleOnlineDisconnect(message) {
   if (state.mode !== 'online') return;
+  logOnlineWs('disconnect-handled', {
+    message,
+    roomId: state.online.roomId || null,
+    role: state.online.role || null,
+    running: state.running,
+    connected: state.online.connected
+  });
   const wasRunning = state.running;
   state.running = false;
   clearInterval(timerInterval);
@@ -601,11 +635,25 @@ function handleOnlineDisconnect(message) {
 
 function handleOnlineMessage(payload) {
   if (!payload || typeof payload !== 'object') return;
+  logOnlineWs('message', {
+    type: payload.type || null,
+    roomId: payload.roomId || null,
+    roomIdState: state.online.roomId || null,
+    role: state.online.role || null,
+    connected: state.online.connected
+  });
   if (payload.type === 'error') {
+    logOnlineWs('server-error', {
+      error: payload.error || 'Falha na comunicacao com o servidor.'
+    });
     setRoomStatus(payload.error || 'Falha na comunicacao com o servidor.');
     return;
   }
   if (payload.type === 'created') {
+    logOnlineWs('room-created', {
+      roomId: payload.roomId || null,
+      sessionId: payload.sessionId || null
+    });
     setupOnlineSession(payload.roomId || '', 'host', payload.sessionId || createClientId());
     state.playerRoundWins = 0;
     state.cpuRoundWins = 0;
@@ -619,6 +667,11 @@ function handleOnlineMessage(payload) {
     return;
   }
   if (payload.type === 'joined') {
+    logOnlineWs('room-joined', {
+      roomId: payload.roomId || null,
+      sessionId: payload.sessionId || null,
+      hostChoice: payload.hostChoice?.name || null
+    });
     setupOnlineSession(payload.roomId || '', 'guest', payload.sessionId || createClientId());
     state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : state.playerChoice;
     state.cpuChoice = payload.hostChoice ? { ...payload.hostChoice } : state.cpuChoice;
@@ -633,6 +686,10 @@ function handleOnlineMessage(payload) {
     return;
   }
   if (payload.type === 'peer-joined' && state.online.role === 'host' && !state.online.connected) {
+    logOnlineWs('peer-joined', {
+      roomId: state.online.roomId || null,
+      guestChoice: payload.guestChoice?.name || null
+    });
     state.online.remoteChoice = payload.guestChoice || null;
     state.cpuChoice = payload.guestChoice ? { ...payload.guestChoice } : state.cpuChoice;
     state.online.connected = true;
@@ -646,6 +703,9 @@ function handleOnlineMessage(payload) {
     return;
   }
   if (payload.type === 'peer-left' && state.online.role === 'host') {
+    logOnlineWs('peer-left', {
+      roomId: state.online.roomId || null
+    });
     state.online.connected = false;
     handleOnlineDisconnect('Oponente desconectou.');
     return;
@@ -661,6 +721,10 @@ function handleOnlineMessage(payload) {
     return;
   }
   if (payload.type === 'match-start' && state.online.role === 'guest') {
+    logOnlineWs('match-start-received', {
+      roomId: state.online.roomId || null,
+      snapshotPresent: Boolean(payload.snapshot)
+    });
     state.online.connected = true;
     if (state.online.connectionTimeoutId) {
       clearTimeout(state.online.connectionTimeoutId);
@@ -674,18 +738,32 @@ function handleOnlineMessage(payload) {
     return;
   }
   if (payload.type === 'match-start') {
+    logOnlineWs('match-start-pending', {
+      roomId: state.online.roomId || null,
+      role: state.online.role || null
+    });
     state.online.pendingMatchStart = payload;
     return;
   }
   if (payload.type === 'state' && state.online.role === 'guest') {
+    logOnlineWs('state-update', {
+      roomId: state.online.roomId || null
+    });
     state.online.latestSnapshot = payload.snapshot || null;
     return;
   }
   if (payload.type === 'match-end' && state.online.role === 'guest') {
+    logOnlineWs('match-end-received', {
+      roomId: state.online.roomId || null
+    });
     state.online.latestSnapshot = payload.snapshot || null;
     return;
   }
   if (payload.type === 'room-closed') {
+    logOnlineWs('room-closed', {
+      roomId: state.online.roomId || null,
+      reason: payload.reason || null
+    });
     handleOnlineDisconnect(payload.reason || 'A sala foi encerrada.');
   }
 }
@@ -695,28 +773,65 @@ function ensureOnlineSocket(transport = state.online.transport) {
     return Promise.reject(new Error('Este navegador nao suporta WebSocket para o modo online.'));
   }
   if (state.online.socket && (state.online.socket.readyState === WebSocket.OPEN || state.online.socket.readyState === WebSocket.CONNECTING)) {
+    logOnlineWs('reuse-socket', {
+      socketState: getSocketStateLabel(state.online.socket),
+      roomId: state.online.roomId || null,
+      role: state.online.role || null
+    });
     return Promise.resolve();
   }
   return new Promise((resolve, reject) => {
     try {
-      const socket = new WebSocket(getOnlineSocketUrl());
+      const url = getOnlineSocketUrl();
+      const socket = new WebSocket(url);
       state.online.socket = socket;
       state.online.socketOpen = false;
+      logOnlineWs('connect-attempt', {
+        url,
+        roomId: state.online.roomId || null,
+        role: state.online.role || null
+      });
       socket.onopen = () => {
         state.online.socketOpen = true;
+        logOnlineWs('open', {
+          socketState: getSocketStateLabel(socket),
+          roomId: state.online.roomId || null,
+          role: state.online.role || null
+        });
         resolve();
       };
       socket.onmessage = (event) => {
         try {
-          handleOnlineMessage(JSON.parse(event.data));
-        } catch {
-          // Ignore malformed payloads.
+          const parsed = JSON.parse(event.data);
+          logOnlineWs('raw-message', {
+            type: parsed?.type || null,
+            socketState: getSocketStateLabel(socket)
+          });
+          handleOnlineMessage(parsed);
+        } catch (error) {
+          logOnlineWs('parse-error', {
+            message: String(error?.message || error || 'invalid payload')
+          });
         }
       };
-      socket.onerror = () => {
+      socket.onerror = (error) => {
+        logOnlineWs('error', {
+          socketState: getSocketStateLabel(socket),
+          roomId: state.online.roomId || null,
+          role: state.online.role || null,
+          error: error?.message || null
+        });
         if (!state.online.socketOpen) reject(new Error('Nao foi possivel conectar no servidor WebSocket.'));
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        logOnlineWs('close', {
+          code: event.code,
+          reason: event.reason || null,
+          wasClean: event.wasClean,
+          socketState: getSocketStateLabel(socket),
+          roomId: state.online.roomId || null,
+          role: state.online.role || null
+        });
         if (state.online.socket !== socket) return;
         state.online.socket = null;
         state.online.socketOpen = false;
@@ -725,6 +840,10 @@ function ensureOnlineSocket(transport = state.online.transport) {
         }
       };
     } catch {
+      logOnlineWs('connect-failed', {
+        roomId: state.online.roomId || null,
+        role: state.online.role || null
+      });
       state.online.socket = null;
       state.online.socketOpen = false;
       reject(new Error('Nao foi possivel conectar no servidor WebSocket.'));
@@ -1185,6 +1304,12 @@ class Fighter {
 }
 
 function setupOnlineSession(roomId, role, sessionId, transport = state.online.transport) {
+  logOnlineWs('setup-session', {
+    roomId: roomId || null,
+    role,
+    sessionId: sessionId || null,
+    transport: transport || state.online.transport || getPreferredOnlineTransport()
+  });
   if (state.online.connectionTimeoutId) {
     clearTimeout(state.online.connectionTimeoutId);
     state.online.connectionTimeoutId = null;
@@ -1216,6 +1341,12 @@ function setupOnlineSession(roomId, role, sessionId, transport = state.online.tr
 }
 
 function closeOnlineTransport(closeSocket = true) {
+  logOnlineWs('close-transport', {
+    closeSocket,
+    socketState: getSocketStateLabel(state.online.socket),
+    roomId: state.online.roomId || null,
+    role: state.online.role || null
+  });
   if (state.online.connectionTimeoutId) {
     clearTimeout(state.online.connectionTimeoutId);
   }
@@ -1897,6 +2028,10 @@ async function beginFight() {
     for (const transport of transports) {
       try {
         state.online.transport = transport;
+        logOnlineWs('queue-join-attempt', {
+          transport,
+          selectedCharacter: selected?.name || null
+        });
         if (transport === 'api') {
           const response = await postOnlineAction({
             type: 'play',
@@ -1912,6 +2047,10 @@ async function beginFight() {
         } else {
           await ensureOnlineSocket('ws');
           state.playerChoice = { ...selected };
+          logOnlineWs('queue-join-sent', {
+            transport,
+            selectedCharacter: selected?.name || null
+          });
           sendOnlineMessage({
             type: 'play',
             choice: state.online.localChoice
@@ -1936,6 +2075,11 @@ async function beginFight() {
 }
 
 function resetToSelect() {
+  logOnlineWs('reset-to-select', {
+    roomId: state.online.roomId || null,
+    role: state.online.role || null,
+    running: state.running
+  });
   if (state.mode === 'online' && state.online.role === 'host' && state.online.roomId) {
     sendOnlineMessage({
       type: 'close',
