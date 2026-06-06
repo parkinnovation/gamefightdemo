@@ -212,29 +212,12 @@ function getPreferredOnlineTransport() {
 
 function getOnlineTransportCandidates() {
   if (!canUseOnlineTransport()) return [];
-  const supportsWebSocket = typeof window.WebSocket === 'function';
-  // Prefer WebSocket everywhere for real-time responsiveness, with API as fallback.
-  const preferred = supportsWebSocket ? 'ws' : 'api';
-  const fallback = preferred === 'api' ? 'ws' : 'api';
-  const candidates = [];
-  if (preferred === 'ws' ? supportsWebSocket : true) candidates.push(preferred);
-  if (!candidates.includes(fallback) && (fallback !== 'ws' || supportsWebSocket)) {
-    candidates.push(fallback);
-  }
-  return candidates;
+  return typeof window.WebSocket === 'function' ? ['ws'] : [];
 }
 
 async function resolveOnlineTransport() {
   if (!canUseOnlineTransport()) return null;
-  const candidates = getOnlineTransportCandidates();
-  for (const transport of candidates) {
-    if (transport === 'api') {
-      if (await probeOnlineApi()) return 'api';
-      continue;
-    }
-    if (transport === 'ws') return 'ws';
-  }
-  return null;
+  return getOnlineTransportCandidates()[0] || null;
 }
 
 function getOnlineApiBaseUrl() {
