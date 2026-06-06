@@ -1941,7 +1941,7 @@ function startRound(showIntro = true) {
     y: GROUND_Y,
     faceRight: false
   });
-  dom.playerName.textContent = state.mode === 'online' ? state.playerChoice.name : `${state.playerChoice.name} (CPU)`;
+  dom.playerName.textContent = state.playerChoice.name;
   dom.enemyName.textContent = state.mode === 'online' ? state.cpuChoice.name : `${state.cpuChoice.name} (CPU)`;
   if (showIntro) {
     state.overlayMessage = 'READY?';
