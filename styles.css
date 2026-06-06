@@ -443,11 +443,46 @@ canvas {
 
 @media (max-width: 900px) {
   .hud {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .player-side {
+    min-width: 0;
+  }
+
+  .player-side .name {
+    font-size: 0.72rem;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bar {
+    height: 10px;
+  }
+
+  .rounds {
+    display: none;
+  }
+
+  .center-info {
+    align-self: center;
+  }
+
+  .label {
+    font-size: 0.62rem;
+  }
+
+  .value,
+  .timer {
+    font-size: 0.9rem;
   }
 
   .player-side.right {
-    text-align: left;
+    text-align: right;
   }
 }
 
@@ -455,9 +490,35 @@ canvas {
   .touch-controls {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 10px 12px;
   }
 
   canvas {
-    max-height: 50vh;
+    max-height: 42vh;
+  }
+
+  .touch-cluster.movement {
+    grid-template-columns: repeat(2, minmax(52px, 1fr));
+  }
+
+  .touch-cluster.actions {
+    min-width: 0;
+  }
+
+  .touch-btn {
+    min-height: 52px;
+    min-width: 52px;
+  }
+
+  .touch-btn.action-jump {
+    min-width: 60px;
+    min-height: 60px;
+  }
+
+  .touch-btn.action-hit,
+  .touch-btn.action-kick {
+    min-width: 54px;
+    min-height: 54px;
   }
 }
