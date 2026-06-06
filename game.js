@@ -206,6 +206,7 @@ function canUseOnlineTransport() {
 }
 
 function getPreferredOnlineTransport() {
+  if (state.online.apiAvailable === true) return 'api';
   const candidates = getOnlineTransportCandidates();
   return candidates[0] || null;
 }
@@ -217,6 +218,8 @@ function getOnlineTransportCandidates() {
 
 async function resolveOnlineTransport() {
   if (!canUseOnlineTransport()) return null;
+  const apiAvailable = await probeOnlineApi();
+  if (apiAvailable) return 'api';
   return getOnlineTransportCandidates()[0] || null;
 }
 
