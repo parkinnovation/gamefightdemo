@@ -465,7 +465,14 @@ canvas {
   }
 
   .rounds {
-    display: none;
+    min-height: 10px;
+    margin-top: 4px;
+  }
+
+  .round-dot {
+    width: 9px;
+    height: 9px;
+    margin-right: 4px;
   }
 
   .center-info {
