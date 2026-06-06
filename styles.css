@@ -30,6 +30,23 @@ body {
   padding: 16px;
 }
 
+.site-footer {
+  padding: 0 16px 18px;
+  text-align: center;
+}
+
+.site-footer a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-footer a:hover {
+  color: var(--accent-2);
+}
+
 .screen {
   display: none;
 }
