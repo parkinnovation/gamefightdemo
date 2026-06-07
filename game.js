@@ -347,6 +347,79 @@ function createEmptyCpuLearning(cpuId, opponentId) {
   };
 }
 
+function safePositiveNumber(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return n > 0 ? n : 0;
+}
+
+function cpuLearningStorageKey(cpuId, opponentId) {
+  return `gamefight:cpu-learning:${cpuId}:${opponentId}`;
+}
+
+function loadLocalCpuLearning(cpuId, opponentId) {
+  try {
+    const raw = window.localStorage.getItem(cpuLearningStorageKey(cpuId, opponentId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalCpuLearning(learning) {
+  if (!learning?.cpuId || !learning?.opponentId) return;
+  try {
+    window.localStorage.setItem(cpuLearningStorageKey(learning.cpuId, learning.opponentId), JSON.stringify(learning));
+  } catch {
+    // Ignore localStorage failures (private mode, quota, etc).
+  }
+}
+
+function mergeLearningSnapshot(current, incoming) {
+  const next = current || createEmptyCpuLearning(incoming.cpuId, incoming.opponentId);
+  const attackKinds = ['attack1', 'attack2'];
+  const responses = incoming.responses || {};
+  const sequences = incoming.sequences || {};
+
+  for (const attackKind of attackKinds) {
+    if (!next.attacks[attackKind]) {
+      next.attacks[attackKind] = { attempts: 0, hits: 0, totalDamage: 0 };
+    }
+    const payload = incoming.attacks?.[attackKind] || {};
+    next.attacks[attackKind].attempts += safePositiveNumber(payload.attempts);
+    next.attacks[attackKind].hits += safePositiveNumber(payload.hits);
+    next.attacks[attackKind].totalDamage += safePositiveNumber(payload.totalDamage);
+  }
+
+  for (const [enemyAction, actionStats] of Object.entries(responses)) {
+    if (!next.responses[enemyAction]) next.responses[enemyAction] = {};
+    for (const [responseAction, metrics] of Object.entries(actionStats || {})) {
+      if (!next.responses[enemyAction][responseAction]) {
+        next.responses[enemyAction][responseAction] = { count: 0, success: 0 };
+      }
+      next.responses[enemyAction][responseAction].count += safePositiveNumber(metrics.count);
+      next.responses[enemyAction][responseAction].success += safePositiveNumber(metrics.success);
+    }
+  }
+
+  for (const [sequenceKey, metrics] of Object.entries(sequences)) {
+    if (!next.sequences[sequenceKey]) {
+      next.sequences[sequenceKey] = { count: 0, success: 0, totalDamage: 0 };
+    }
+    next.sequences[sequenceKey].count += safePositiveNumber(metrics.count);
+    next.sequences[sequenceKey].success += safePositiveNumber(metrics.success);
+    next.sequences[sequenceKey].totalDamage += safePositiveNumber(metrics.totalDamage);
+  }
+
+  next.matches += 1;
+  if (incoming.won === true) next.wins += 1;
+  if (incoming.won === false) next.losses += 1;
+  next.lastUpdatedAt = Date.now();
+  return next;
+}
+
 function normalizeEnemyAction(action) {
   if (action === 'attack1' || action === 'attack2' || action === 'jump') return action;
   if (action === 'walk') return 'walk';
@@ -384,14 +457,17 @@ function createLearningRuntime(cpuId, opponentId, learning) {
 }
 
 async function loadCpuLearning(cpuId, opponentId) {
+  const local = loadLocalCpuLearning(cpuId, opponentId);
   try {
     const params = new URLSearchParams({ cpuId, opponentId });
     const response = await fetch(`${getCpuLearningApiUrl()}?${params.toString()}`, { cache: 'no-store' });
-    if (!response.ok) return createEmptyCpuLearning(cpuId, opponentId);
+    if (!response.ok) return local || createEmptyCpuLearning(cpuId, opponentId);
     const data = await response.json().catch(() => ({}));
-    return data.learning || createEmptyCpuLearning(cpuId, opponentId);
+    const learning = data.learning || local || createEmptyCpuLearning(cpuId, opponentId);
+    saveLocalCpuLearning(learning);
+    return learning;
   } catch {
-    return createEmptyCpuLearning(cpuId, opponentId);
+    return local || createEmptyCpuLearning(cpuId, opponentId);
   }
 }
 
@@ -533,8 +609,18 @@ async function flushCpuLearning(resultByCpuId) {
   await Promise.all(runtimes.map(async (runtime) => {
     runtime.flushed = true;
     const won = resultByCpuId[runtime.cpuId];
+    const localCurrent = loadLocalCpuLearning(runtime.cpuId, runtime.opponentId) || runtime.learning || createEmptyCpuLearning(runtime.cpuId, runtime.opponentId);
+    const mergedLocal = mergeLearningSnapshot(localCurrent, {
+      cpuId: runtime.cpuId,
+      opponentId: runtime.opponentId,
+      attacks: runtime.session.attacks,
+      responses: runtime.session.responses,
+      sequences: runtime.session.sequences,
+      won
+    });
+    saveLocalCpuLearning(mergedLocal);
     try {
-      await fetch(getCpuLearningApiUrl(), {
+      const response = await fetch(getCpuLearningApiUrl(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -548,6 +634,10 @@ async function flushCpuLearning(resultByCpuId) {
           won
         })
       });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.learning) {
+        saveLocalCpuLearning(data.learning);
+      }
     } catch {
       runtime.flushed = false;
     }
