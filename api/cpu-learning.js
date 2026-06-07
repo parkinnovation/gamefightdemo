@@ -1,5 +1,3 @@
-const CPU_LEARNING_TTL_SECONDS = 60 * 60 * 24 * 60;
-
 let redis = null;
 try {
   const { Redis } = require('@upstash/redis');
@@ -73,7 +71,7 @@ async function loadLearning(cpuId, opponentId) {
 async function saveLearning(cpuId, opponentId, learning) {
   const key = learningKey(cpuId, opponentId);
   if (redisEnabled()) {
-    await redis.set(key, learning, { ex: CPU_LEARNING_TTL_SECONDS });
+    await redis.set(key, learning);
     return;
   }
   memoryLearning.set(key, learning);
