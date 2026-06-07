@@ -7,8 +7,8 @@ const PORT = Number(process.env.PORT || 3000);
 const ROOM_TTL_MS = 1000 * 60 * 60 * 2;
 const WS_HEARTBEAT_INTERVAL_MS = 25000;
 const CPU_LEARNING_PATH = path.join(process.cwd(), '.cpu-learning.json');
+const CPU_LEARNING_BACKUP_PATH = `${CPU_LEARNING_PATH}.bak`;
 const rooms = new Map();
-let cpuLearningCache = null;
 
 function now() {
   return Date.now();
@@ -133,20 +133,27 @@ function safeNumber(value) {
 }
 
 function loadCpuLearningStore() {
-  if (cpuLearningCache) return cpuLearningCache;
   try {
     const raw = fs.readFileSync(CPU_LEARNING_PATH, 'utf8');
     const parsed = JSON.parse(raw);
-    cpuLearningCache = parsed && typeof parsed === 'object' ? parsed : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
-    cpuLearningCache = {};
+    try {
+      const backupRaw = fs.readFileSync(CPU_LEARNING_BACKUP_PATH, 'utf8');
+      const backupParsed = JSON.parse(backupRaw);
+      return backupParsed && typeof backupParsed === 'object' ? backupParsed : {};
+    } catch {
+      return {};
+    }
   }
-  return cpuLearningCache;
 }
 
 function saveCpuLearningStore(store) {
-  cpuLearningCache = store;
-  fs.writeFileSync(CPU_LEARNING_PATH, JSON.stringify(store, null, 2), 'utf8');
+  const serialized = JSON.stringify(store, null, 2);
+  const tmpPath = `${CPU_LEARNING_PATH}.tmp`;
+  fs.writeFileSync(tmpPath, serialized, 'utf8');
+  fs.renameSync(tmpPath, CPU_LEARNING_PATH);
+  fs.writeFileSync(CPU_LEARNING_BACKUP_PATH, serialized, 'utf8');
 }
 
 function mergeCpuLearning(current, incoming) {
