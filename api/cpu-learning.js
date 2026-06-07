@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 let redis = null;
 try {
   const { Redis } = require('@upstash/redis');
@@ -11,6 +14,8 @@ try {
 }
 
 const memoryLearning = globalThis.__gamefightCpuLearning || (globalThis.__gamefightCpuLearning = new Map());
+const CPU_LEARNING_PATH = path.join(process.cwd(), '.cpu-learning.json');
+let fileLearningCache = null;
 
 function now() {
   return Date.now();
@@ -65,6 +70,16 @@ async function loadLearning(cpuId, opponentId) {
   if (redisEnabled()) {
     return (await redis.get(key)) || null;
   }
+  try {
+    if (!fileLearningCache) {
+      const raw = fs.readFileSync(CPU_LEARNING_PATH, 'utf8');
+      const parsed = JSON.parse(raw);
+      fileLearningCache = parsed && typeof parsed === 'object' ? parsed : {};
+    }
+    return fileLearningCache[key] || null;
+  } catch {
+    fileLearningCache = fileLearningCache || {};
+  }
   return memoryLearning.get(key) || null;
 }
 
@@ -73,6 +88,15 @@ async function saveLearning(cpuId, opponentId, learning) {
   if (redisEnabled()) {
     await redis.set(key, learning);
     return;
+  }
+  try {
+    const store = fileLearningCache || {};
+    store[key] = learning;
+    fs.writeFileSync(CPU_LEARNING_PATH, JSON.stringify(store, null, 2), 'utf8');
+    fileLearningCache = store;
+    return;
+  } catch {
+    // Fallback to in-memory storage when file system is unavailable.
   }
   memoryLearning.set(key, learning);
 }
