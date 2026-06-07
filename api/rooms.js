@@ -135,7 +135,7 @@ async function closeRoom(room, reason) {
   if (!room) return room;
   room.closed = true;
   room.matchEnded = true;
-  room.closedReason = reason || room.closedReason || 'A sala foi encerrada.';
+  room.closedReason = reason || room.closedReason || 'The room was closed.';
   await saveRoom(room);
   await clearWaitingRoomId(room.id);
   return room;
@@ -148,18 +148,18 @@ async function closeIfStale(room) {
   const hostStale = room.hostSessionId && isStale(room.hostLastSeenAt);
   const guestStale = room.guestSessionId && isStale(room.guestLastSeenAt);
   if (!hostStale && !guestStale) return room;
-  return closeRoom(room, 'Conexao encerrada com o servidor.');
+  return closeRoom(room, 'Connection closed by the server.');
 }
 
 async function requireRoom(roomId, res) {
   const room = await loadRoom(roomId);
   if (!room) {
-    json(res, 404, { ok: false, error: 'Sala nao encontrada.' });
+    json(res, 404, { ok: false, error: 'Room not found.' });
     return null;
   }
   if (room.expiresAt && room.expiresAt < now()) {
     await deleteRoom(roomId);
-    json(res, 404, { ok: false, error: 'Sala expirada.' });
+    json(res, 404, { ok: false, error: 'Room expired.' });
     return null;
   }
   return room;
@@ -221,7 +221,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== 'POST') {
-    return json(res, 405, { ok: false, error: 'Metodo nao suportado.' });
+    return json(res, 405, { ok: false, error: 'Method not supported.' });
   }
 
   const body = parseBody(req);
@@ -287,9 +287,9 @@ module.exports = async function handler(req, res) {
   const sessionId = String(body.sessionId || '');
 
   if (action === 'join') {
-    if (room.closed) return json(res, 409, { ok: false, error: 'Sala encerrada.' });
+    if (room.closed) return json(res, 409, { ok: false, error: 'Room is closed.' });
     if (room.guestSessionId && !isGuest(room, sessionId)) {
-      return json(res, 409, { ok: false, error: 'Sala cheia.' });
+      return json(res, 409, { ok: false, error: 'Room is full.' });
     }
     const nextSessionId = room.guestSessionId || makeSessionId();
     room.guestSessionId = nextSessionId;
@@ -301,7 +301,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (action === 'input') {
-    if (!isGuest(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
+    if (!isGuest(room, sessionId)) return json(res, 403, { ok: false, error: 'Invalid session.' });
     room.guestControls = { pressed: body.controls?.pressed || {} };
     room.guestLastSeenAt = now();
     await saveRoom(room);
@@ -309,7 +309,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (action === 'command') {
-    if (!isGuest(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
+    if (!isGuest(room, sessionId)) return json(res, 403, { ok: false, error: 'Invalid session.' });
     room.lastCommandId += 1;
     room.commands.push({ id: room.lastCommandId, command: body.command, createdAt: now() });
     if (room.commands.length > MAX_COMMAND_BUFFER) {
@@ -321,7 +321,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (action === 'state') {
-    if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
+    if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Invalid session.' });
     room.latestSnapshot = body.snapshot || null;
     room.hostLastSeenAt = now();
     await saveRoom(room);
@@ -329,7 +329,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (action === 'match-start') {
-    if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
+    if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Invalid session.' });
     room.matchStarted = true;
     room.matchEnded = false;
     room.hostChoice = body.hostChoice || room.hostChoice || null;
@@ -341,7 +341,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (action === 'match-end') {
-    if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
+    if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Invalid session.' });
     room.matchEnded = true;
     room.latestSnapshot = body.snapshot || room.latestSnapshot || null;
     room.hostLastSeenAt = now();
@@ -350,10 +350,11 @@ module.exports = async function handler(req, res) {
   }
 
   if (action === 'close') {
-    if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Sessao invalida.' });
-    await closeRoom(room, 'Partida encerrada.');
+    if (!isHost(room, sessionId)) return json(res, 403, { ok: false, error: 'Invalid session.' });
+    await closeRoom(room, 'Match ended.');
     return json(res, 200, { ok: true });
   }
 
   return json(res, 400, { ok: false, error: 'Acao invalida.' });
 };
+

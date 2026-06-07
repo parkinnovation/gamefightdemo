@@ -36,7 +36,7 @@ function send(ws, payload) {
   ws.send(JSON.stringify(payload));
 }
 
-function closeRoom(roomId, reason = 'A sala foi encerrada.') {
+function closeRoom(roomId, reason = 'The room was closed.') {
   const room = rooms.get(roomId);
   if (!room) return;
   send(room.hostSocket, { type: 'room-closed', reason });
@@ -49,12 +49,12 @@ function closeRoom(roomId, reason = 'A sala foi encerrada.') {
 function requireRoom(roomId, ws) {
   const room = rooms.get(roomId);
   if (!room) {
-    send(ws, { type: 'error', error: 'Sala nao encontrada.' });
+    send(ws, { type: 'error', error: 'Room not found.' });
     return null;
   }
   if (room.expiresAt < now()) {
-    closeRoom(roomId, 'Sala expirada.');
-    send(ws, { type: 'error', error: 'Sala expirada.' });
+    closeRoom(roomId, 'Room expired.');
+    send(ws, { type: 'error', error: 'Room expired.' });
     return null;
   }
   return room;
@@ -261,7 +261,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true, learning: merged });
       return;
     }
-    sendJson(res, 405, { ok: false, error: 'Metodo nao suportado.' });
+    sendJson(res, 405, { ok: false, error: 'Method not supported.' });
     return;
   }
 
@@ -382,7 +382,7 @@ wss.on('connection', (ws) => {
       const room = requireRoom(roomId, ws);
       if (!room) return;
       if (room.guestSocket && room.guestSocket.readyState === WebSocket.OPEN) {
-        send(ws, { type: 'error', error: 'Sala cheia.' });
+        send(ws, { type: 'error', error: 'Room is full.' });
         return;
       }
       const sessionId = makeSessionId();
@@ -423,7 +423,7 @@ wss.on('connection', (ws) => {
     const role = String(message.role || ws._role || '');
     const sessionId = String(message.sessionId || ws._sessionId || '');
     if (!validateSession(room, ws, role, sessionId)) {
-      send(ws, { type: 'error', error: 'Sessao invalida.' });
+      send(ws, { type: 'error', error: 'Invalid session.' });
       return;
     }
 
@@ -528,7 +528,7 @@ setInterval(() => {
   const time = now();
   for (const [roomId, room] of rooms.entries()) {
     if (room.expiresAt < time) {
-      closeRoom(roomId, 'Sala expirada.');
+      closeRoom(roomId, 'Room expired.');
     }
   }
 }, 30000);
@@ -536,3 +536,4 @@ setInterval(() => {
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+

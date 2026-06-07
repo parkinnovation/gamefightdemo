@@ -299,7 +299,7 @@ async function postOnlineAction(payload) {
   const body = buildOnlineApiPayload(payload);
   if (!body) return null;
   if (state.online.apiAvailable === false) {
-    throw new Error('O modo online nao esta disponivel neste deploy.');
+    throw new Error('Online mode is not available in this deployment.');
   }
   const response = await fetch(getOnlineApiUrl(), {
     method: 'POST',
@@ -314,7 +314,7 @@ async function postOnlineAction(payload) {
     if (isTransportProbe) {
       state.online.apiAvailable = false;
     }
-    const error = new Error(isTransportProbe ? 'O modo online nao esta disponivel neste deploy.' : 'Sala online nao encontrada ou expirada.');
+    const error = new Error(isTransportProbe ? 'Online mode is not available in this deployment.' : 'Online room not found or expired.');
     error.code = isTransportProbe ? 'ONLINE_TRANSPORT_UNAVAILABLE' : 'ONLINE_ROOM_NOT_FOUND';
     throw error;
   }
@@ -651,7 +651,7 @@ function handleOnlineMessage(payload) {
     state.round = 1;
     state.gameOver = false;
     state.running = false;
-    setRoomStatus('Buscando oponente... aguardando conexao.');
+    setRoomStatus('Searching for opponent... waiting for connection.');
     dom.startFightBtn.disabled = true;
     if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
     if (dom.roomCodeInput) dom.roomCodeInput.value = '';
@@ -666,7 +666,7 @@ function handleOnlineMessage(payload) {
     setupOnlineSession(payload.roomId || '', 'guest', payload.sessionId || createClientId());
     state.playerChoice = state.online.localChoice ? { ...state.online.localChoice } : state.playerChoice;
     state.cpuChoice = payload.hostChoice ? { ...payload.hostChoice } : state.cpuChoice;
-    setRoomStatus('Oponente encontrado. Conectando partida...');
+    setRoomStatus('Opponent found. Connecting match...');
     dom.startFightBtn.disabled = true;
     if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
     if (state.online.pendingMatchStart) {
@@ -688,7 +688,7 @@ function handleOnlineMessage(payload) {
       clearTimeout(state.online.connectionTimeoutId);
       state.online.connectionTimeoutId = null;
     }
-    setRoomStatus(`Oponente conectado: ${state.cpuChoice?.name || 'Convidado'}. Iniciando partida...`);
+    setRoomStatus(`Opponent connected: ${state.cpuChoice?.name || 'Guest'}. Starting match...`);
     state.overlayMessage = 'OPONENTE CONECTADO';
     startOnlineMatch();
     return;
@@ -755,13 +755,13 @@ function handleOnlineMessage(payload) {
       roomId: state.online.roomId || null,
       reason: payload.reason || null
     });
-    handleOnlineDisconnect(payload.reason || 'A sala foi encerrada.');
+    handleOnlineDisconnect(payload.reason || 'The room was closed.');
   }
 }
 
 function ensureOnlineSocket(transport = state.online.transport) {
   if (transport !== 'ws') {
-    return Promise.reject(new Error('Este navegador nao suporta WebSocket para o modo online.'));
+    return Promise.reject(new Error('This browser does not support WebSocket for online mode.'));
   }
   if (state.online.socket && (state.online.socket.readyState === WebSocket.OPEN || state.online.socket.readyState === WebSocket.CONNECTING)) {
     logOnlineWs('reuse-socket', {
@@ -812,7 +812,7 @@ function ensureOnlineSocket(transport = state.online.transport) {
           role: state.online.role || null,
           error: error?.message || null
         });
-        if (!state.online.socketOpen) reject(new Error('Nao foi possivel conectar no servidor WebSocket.'));
+        if (!state.online.socketOpen) reject(new Error('Could not connect to the WebSocket server.'));
       };
       socket.onclose = (event) => {
         logOnlineWs('close', {
@@ -827,7 +827,7 @@ function ensureOnlineSocket(transport = state.online.transport) {
         state.online.socket = null;
         state.online.socketOpen = false;
         if (state.mode === 'online' && (state.running || state.online.roomId)) {
-          handleOnlineDisconnect('Conexao encerrada com o servidor.');
+          handleOnlineDisconnect('Connection closed by the server.');
         }
       };
     } catch {
@@ -837,7 +837,7 @@ function ensureOnlineSocket(transport = state.online.transport) {
       });
       state.online.socket = null;
       state.online.socketOpen = false;
-      reject(new Error('Nao foi possivel conectar no servidor WebSocket.'));
+      reject(new Error('Could not connect to the WebSocket server.'));
     }
   });
 }
@@ -1063,17 +1063,17 @@ function buildCharacterSelect() {
 }
 
 function getStartButtonLabel() {
-  if (state.mode === 'online') return 'Jogar Online';
-  if (state.mode === 'cpu-duel') return 'Iniciar CPU x CPU';
-  return 'Iniciar Luta';
+  if (state.mode === 'online') return 'Play Online';
+  if (state.mode === 'cpu-duel') return 'Start CPU vs CPU';
+  return 'Start Fight';
 }
 
 function refreshSubtitle() {
   const subtitle = dom.selectScreen.querySelector('.subtitle');
   if (!subtitle) return;
   subtitle.textContent = state.mode === 'cpu-duel'
-    ? 'Escolha dois lutadores para a luta automatica'
-    : 'Escolha seu lutador';
+    ? 'Choose two fighters for an automated match'
+    : 'Choose your fighter';
 }
 
 function updateCharacterSelectionUi() {
@@ -1109,7 +1109,7 @@ function refreshModeUi() {
   if (dom.roomCodeInput && !state.online.roomId) dom.roomCodeInput.value = '';
   refreshSubtitle();
   if (!onlineMode) {
-    setRoomStatus('Escolha um lutador e clique em Jogar Online para entrar na fila.');
+    setRoomStatus('Choose a fighter and click Play Online to enter the queue.');
     if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.disabled = true;
   }
   updateCharacterSelectionUi();
@@ -1126,7 +1126,7 @@ function setMode(mode) {
   dom.characterGrid.querySelectorAll('.character-card').forEach((card) => card.classList.remove('selected'));
   refreshModeUi();
   if (mode === 'online') {
-    setRoomStatus('Escolha um lutador e clique em Jogar Online para entrar na fila.');
+    setRoomStatus('Choose a fighter and click Play Online to enter the queue.');
   }
 }
 
@@ -1382,13 +1382,13 @@ async function pollOnlineRoom() {
     if (!room) {
       state.online.roomMissingCount += 1;
       if (state.online.roomMissingCount < ONLINE_POLL_ROOM_MISS_TOLERANCE) return;
-      handleOnlineDisconnect('Conexao encerrada com o servidor.');
+      handleOnlineDisconnect('Connection closed by the server.');
       return;
     }
     state.online.roomMissingCount = 0;
     state.online.pollErrorCount = 0;
     if (room.closed) {
-      handleOnlineDisconnect(room.closedReason || 'A sala foi encerrada.');
+      handleOnlineDisconnect(room.closedReason || 'The room was closed.');
       return;
     }
     if (state.online.role === 'host') {
@@ -1409,7 +1409,7 @@ async function pollOnlineRoom() {
           clearTimeout(state.online.connectionTimeoutId);
           state.online.connectionTimeoutId = null;
         }
-        setRoomStatus(`Oponente conectado: ${state.cpuChoice?.name || 'Convidado'}. Iniciando partida...`);
+        setRoomStatus(`Opponent connected: ${state.cpuChoice?.name || 'Guest'}. Starting match...`);
         state.overlayMessage = 'OPONENTE CONECTADO';
         startOnlineMatch();
       }
@@ -1447,7 +1447,7 @@ async function pollOnlineRoom() {
     if (state.mode === 'online') {
       state.online.pollErrorCount += 1;
       if (state.online.pollErrorCount < ONLINE_POLL_ERROR_TOLERANCE) return;
-      handleOnlineDisconnect(error?.message || 'Conexao encerrada com o servidor.');
+      handleOnlineDisconnect(error?.message || 'Connection closed by the server.');
     }
   } finally {
     state.online.pollInFlight = false;
@@ -1818,21 +1818,21 @@ function refreshHud() {
 }
 
 function getRoundOverlayText(winner) {
-  if (winner === 'draw') return 'EMPATE';
+  if (winner === 'draw') return 'DRAW';
   if (state.mode === 'cpu-duel') {
     const winningName = winner === 'player' ? state.playerChoice?.name : state.cpuChoice?.name;
-    return winningName ? `ROUND DO ${winningName.toUpperCase()}` : 'ROUND';
+    return winningName ? `${winningName.toUpperCase()} ROUND` : 'ROUND';
   }
-  return winner === 'player' ? 'ROUND DO PLAYER' : 'ROUND DA CPU';
+  return winner === 'player' ? 'PLAYER ROUND' : 'CPU ROUND';
 }
 
 function getMatchEndText() {
   if (state.mode === 'cpu-duel') {
     return state.playerRoundWins > state.cpuRoundWins
-      ? `${state.playerChoice?.name?.toUpperCase() || 'LADO ESQUERDO'} VENCE!`
-      : `${state.cpuChoice?.name?.toUpperCase() || 'LADO DIREITO'} VENCE!`;
+      ? `${state.playerChoice?.name?.toUpperCase() || 'LEFT SIDE'} WINS!`
+      : `${state.cpuChoice?.name?.toUpperCase() || 'RIGHT SIDE'} WINS!`;
   }
-  return state.playerRoundWins > state.cpuRoundWins ? 'VITORIA!' : 'DERROTA!';
+  return state.playerRoundWins > state.cpuRoundWins ? 'VICTORY!' : 'DEFEAT!';
 }
 
 function updateRoundState() {
@@ -2019,7 +2019,7 @@ async function beginFight() {
   try {
     const primaryTransport = await resolveOnlineTransport();
     if (!primaryTransport) {
-      throw new Error('Nao foi possivel iniciar o modo online neste navegador.');
+      throw new Error('Could not start online mode in this browser.');
     }
     const transports = [primaryTransport, ...getOnlineTransportCandidates().filter((transport) => transport !== primaryTransport)];
     let lastError = null;
@@ -2053,7 +2053,7 @@ async function beginFight() {
             type: 'play',
             choice: state.online.localChoice
           });
-          setRoomStatus('Buscando oponente...');
+          setRoomStatus('Searching for opponent...');
         }
         dom.startFightBtn.disabled = true;
         if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = true;
@@ -2066,9 +2066,9 @@ async function beginFight() {
         }
       }
     }
-    throw lastError || new Error('Nao foi possivel entrar na fila online.');
+    throw lastError || new Error('Could not join the online queue.');
   } catch (error) {
-    setRoomStatus(error?.message || 'Nao foi possivel entrar na fila online.');
+    setRoomStatus(error?.message || 'Could not join the online queue.');
   }
 }
 
