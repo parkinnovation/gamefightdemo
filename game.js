@@ -1100,8 +1100,8 @@ function refreshModeUi() {
   const onlineMode = state.mode === 'online';
   dom.modeCpuBtn.classList.toggle('active', state.mode === 'cpu');
   if (dom.modeCpuDuelBtn) dom.modeCpuDuelBtn.classList.toggle('active', state.mode === 'cpu-duel');
-  dom.modeOnlineBtn.classList.toggle('active', onlineMode);
-  dom.onlinePanel.classList.toggle('hidden', !onlineMode);
+  if (dom.modeOnlineBtn) dom.modeOnlineBtn.classList.toggle('active', onlineMode);
+  if (dom.onlinePanel) dom.onlinePanel.classList.toggle('hidden', !onlineMode);
   dom.startFightBtn.textContent = getStartButtonLabel();
   if (dom.joinRoomBtn) dom.joinRoomBtn.disabled = !onlineMode;
   if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.disabled = true;
@@ -2120,7 +2120,7 @@ window.addEventListener('keyup', (event) => {
 
 dom.modeCpuBtn.addEventListener('click', () => setMode('cpu'));
 if (dom.modeCpuDuelBtn) dom.modeCpuDuelBtn.addEventListener('click', () => setMode('cpu-duel'));
-dom.modeOnlineBtn.addEventListener('click', () => setMode('online'));
+if (dom.modeOnlineBtn) dom.modeOnlineBtn.addEventListener('click', () => setMode('online'));
 dom.startFightBtn.addEventListener('click', beginFight);
 dom.backSelectBtn.addEventListener('click', resetToSelect);
 if (dom.joinRoomBtn) dom.joinRoomBtn.classList.add('hidden');
