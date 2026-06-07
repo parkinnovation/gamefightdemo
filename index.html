@@ -13,32 +13,32 @@
   <main class="app">
     <section id="character-select" class="screen active">
       <h1>Game Fight</h1>
-      <p class="subtitle">Escolha seu lutador</p>
+      <p class="subtitle">Choose your fighter</p>
       <div class="mode-switch">
-        <button id="mode-cpu" class="mode-option active">Humano x CPU</button>
-        <button id="mode-cpu-duel" class="mode-option">CPU x CPU</button>
-        <button id="mode-online" class="mode-option">Humano x Humano</button>
+        <button id="mode-cpu" class="mode-option active">Human vs CPU</button>
+        <button id="mode-cpu-duel" class="mode-option">CPU vs CPU</button>
+        <button id="mode-online" class="mode-option">Human vs Human</button>
       </div>
       <div id="online-panel" class="online-panel hidden">
         <div class="room-card">
-          <div class="room-title">Partida online</div>
-          <p id="room-status" class="room-status">Escolha um lutador e clique em Jogar Online para entrar na fila.</p>
+          <div class="room-title">Online match</div>
+          <p id="room-status" class="room-status">Choose a fighter and click Play Online to enter the queue.</p>
           <div class="room-row hidden">
-            <input id="room-code-input" class="room-input" type="text" maxlength="12" placeholder="Código da sala" />
-            <button id="join-room" class="secondary">Entrar na sala</button>
+            <input id="room-code-input" class="room-input" type="text" maxlength="12" placeholder="Room code" />
+            <button id="join-room" class="secondary">Join room</button>
           </div>
           <div class="room-row room-inline hidden">
             <div class="room-code-wrap">
-              <span class="room-label">Código interno</span>
+              <span class="room-label">Internal code</span>
               <strong id="room-code">-</strong>
             </div>
-            <button id="copy-room-code" class="secondary" disabled>Copiar código</button>
+            <button id="copy-room-code" class="secondary" disabled>Copy code</button>
           </div>
         </div>
       </div>
       <div id="character-grid" class="character-grid"></div>
-      <button id="start-fight" class="primary" disabled>Iniciar Luta</button>
-      <p class="hint">Controles: A/D mover, W pular, J soco, K chute</p>
+      <button id="start-fight" class="primary" disabled>Start Fight</button>
+      <p class="hint">Controls: A/D move, W jump, J punch, K kick</p>
     </section>
 
     <section id="fight-screen" class="screen">
@@ -65,21 +65,21 @@
         <div id="overlay-text" class="overlay"></div>
       </div>
 
-      <div id="touch-controls" class="touch-controls" aria-label="Controles de toque">
+      <div id="touch-controls" class="touch-controls" aria-label="Touch controls">
         <div class="touch-cluster movement" aria-label="Movimento">
-          <button class="touch-btn dpad-left" data-code="KeyA" type="button" aria-label="Mover para a esquerda">◀</button>
-          <button class="touch-btn dpad-right" data-code="KeyD" type="button" aria-label="Mover para a direita">▶</button>
+          <button class="touch-btn dpad-left" data-code="KeyA" type="button" aria-label="Move left">◀</button>
+          <button class="touch-btn dpad-right" data-code="KeyD" type="button" aria-label="Move right">▶</button>
         </div>
-        <div class="touch-cluster actions" aria-label="Ações">
-          <button class="touch-btn action-jump" data-code="KeyW" type="button" aria-label="Pular">A</button>
+        <div class="touch-cluster actions" aria-label="Actions">
+          <button class="touch-btn action-jump" data-code="KeyW" type="button" aria-label="Jump">A</button>
           <div class="action-row">
-            <button class="touch-btn action-hit" data-code="KeyJ" type="button" aria-label="Soco">B</button>
-            <button class="touch-btn action-kick" data-code="KeyK" type="button" aria-label="Chute">X</button>
+            <button class="touch-btn action-hit" data-code="KeyJ" type="button" aria-label="Punch">B</button>
+            <button class="touch-btn action-kick" data-code="KeyK" type="button" aria-label="Kick">X</button>
           </div>
         </div>
       </div>
 
-      <button id="back-select" class="secondary">Voltar para seleção</button>
+      <button id="back-select" class="secondary">Back to selection</button>
     </section>
   </main>
 
