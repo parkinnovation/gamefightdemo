@@ -15,7 +15,7 @@ try {
 
 const memoryLearning = globalThis.__gamefightCpuLearning || (globalThis.__gamefightCpuLearning = new Map());
 const CPU_LEARNING_PATH = path.join(process.cwd(), '.cpu-learning.json');
-let fileLearningCache = null;
+const CPU_LEARNING_BACKUP_PATH = `${CPU_LEARNING_PATH}.bak`;
 
 function now() {
   return Date.now();
@@ -71,14 +71,19 @@ async function loadLearning(cpuId, opponentId) {
     return (await redis.get(key)) || null;
   }
   try {
-    if (!fileLearningCache) {
-      const raw = fs.readFileSync(CPU_LEARNING_PATH, 'utf8');
-      const parsed = JSON.parse(raw);
-      fileLearningCache = parsed && typeof parsed === 'object' ? parsed : {};
-    }
-    return fileLearningCache[key] || null;
+    const raw = fs.readFileSync(CPU_LEARNING_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    const store = parsed && typeof parsed === 'object' ? parsed : {};
+    return store[key] || null;
   } catch {
-    fileLearningCache = fileLearningCache || {};
+    try {
+      const backupRaw = fs.readFileSync(CPU_LEARNING_BACKUP_PATH, 'utf8');
+      const backupParsed = JSON.parse(backupRaw);
+      const backupStore = backupParsed && typeof backupParsed === 'object' ? backupParsed : {};
+      return backupStore[key] || null;
+    } catch {
+      // Continue to in-memory fallback.
+    }
   }
   return memoryLearning.get(key) || null;
 }
@@ -90,10 +95,20 @@ async function saveLearning(cpuId, opponentId, learning) {
     return;
   }
   try {
-    const store = fileLearningCache || {};
+    let store = {};
+    try {
+      const raw = fs.readFileSync(CPU_LEARNING_PATH, 'utf8');
+      const parsed = JSON.parse(raw);
+      store = parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      store = {};
+    }
     store[key] = learning;
-    fs.writeFileSync(CPU_LEARNING_PATH, JSON.stringify(store, null, 2), 'utf8');
-    fileLearningCache = store;
+    const serialized = JSON.stringify(store, null, 2);
+    const tmpPath = `${CPU_LEARNING_PATH}.tmp`;
+    fs.writeFileSync(tmpPath, serialized, 'utf8');
+    fs.renameSync(tmpPath, CPU_LEARNING_PATH);
+    fs.writeFileSync(CPU_LEARNING_BACKUP_PATH, serialized, 'utf8');
     return;
   } catch {
     // Fallback to in-memory storage when file system is unavailable.

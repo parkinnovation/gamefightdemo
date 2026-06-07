@@ -377,6 +377,35 @@ function saveLocalCpuLearning(learning) {
   }
 }
 
+function getLearningStrength(learning) {
+  if (!learning || typeof learning !== 'object') return -1;
+  const matches = safePositiveNumber(learning.matches);
+  const wins = safePositiveNumber(learning.wins);
+  const losses = safePositiveNumber(learning.losses);
+  const attack1 = learning.attacks?.attack1 || {};
+  const attack2 = learning.attacks?.attack2 || {};
+  const attempts = safePositiveNumber(attack1.attempts) + safePositiveNumber(attack2.attempts);
+  const hits = safePositiveNumber(attack1.hits) + safePositiveNumber(attack2.hits);
+  const damage = safePositiveNumber(attack1.totalDamage) + safePositiveNumber(attack2.totalDamage);
+  const responses = Object.values(learning.responses || {}).reduce((acc, actions) => {
+    return acc + Object.values(actions || {}).reduce((innerAcc, metrics) => {
+      return innerAcc + safePositiveNumber(metrics?.count) + safePositiveNumber(metrics?.success);
+    }, 0);
+  }, 0);
+  const sequences = Object.values(learning.sequences || {}).reduce((acc, metrics) => {
+    return acc + safePositiveNumber(metrics?.count) + safePositiveNumber(metrics?.success) + safePositiveNumber(metrics?.totalDamage);
+  }, 0);
+  const updatedAt = safePositiveNumber(learning.lastUpdatedAt);
+  return (matches * 1000000) + (wins * 10000) + (losses * 10000) + (attempts * 400) + (hits * 300) + (damage * 2) + (responses * 40) + (sequences * 20) + Math.min(updatedAt, 999999);
+}
+
+function pickMostCompleteLearning(primary, secondary) {
+  const primaryStrength = getLearningStrength(primary);
+  const secondaryStrength = getLearningStrength(secondary);
+  if (secondaryStrength > primaryStrength) return secondary;
+  return primary;
+}
+
 function mergeLearningSnapshot(current, incoming) {
   const next = current || createEmptyCpuLearning(incoming.cpuId, incoming.opponentId);
   const attackKinds = ['attack1', 'attack2'];
@@ -463,7 +492,8 @@ async function loadCpuLearning(cpuId, opponentId) {
     const response = await fetch(`${getCpuLearningApiUrl()}?${params.toString()}`, { cache: 'no-store' });
     if (!response.ok) return local || createEmptyCpuLearning(cpuId, opponentId);
     const data = await response.json().catch(() => ({}));
-    const learning = data.learning || local || createEmptyCpuLearning(cpuId, opponentId);
+    const remote = data.learning || null;
+    const learning = pickMostCompleteLearning(remote, local) || createEmptyCpuLearning(cpuId, opponentId);
     saveLocalCpuLearning(learning);
     return learning;
   } catch {
@@ -636,7 +666,8 @@ async function flushCpuLearning(resultByCpuId) {
       });
       const data = await response.json().catch(() => ({}));
       if (response.ok && data.learning) {
-        saveLocalCpuLearning(data.learning);
+        const bestLearning = pickMostCompleteLearning(data.learning, mergedLocal);
+        saveLocalCpuLearning(bestLearning);
       }
     } catch {
       runtime.flushed = false;
