@@ -294,6 +294,10 @@ button:disabled {
 .rounds {
   min-height: 12px;
   margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .round-dot {
@@ -308,6 +312,16 @@ button:disabled {
 .round-dot.win {
   background: #facc15;
   border-color: #facc15;
+}
+
+.round-learning {
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .center-info {

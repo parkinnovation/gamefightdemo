@@ -502,6 +502,15 @@ function recordAttackHit(runtime, kind, damage) {
   runtime.lastAttack = kind;
 }
 
+function getLearningWinRate(runtime) {
+  const learning = runtime?.learning;
+  if (!learning) return null;
+  const matches = Number(learning.matches || 0);
+  if (matches <= 0) return null;
+  const wins = Number(learning.wins || 0);
+  return Math.round((wins / matches) * 100);
+}
+
 function chooseBestSequenceBoost(runtime, attackKind) {
   const entries = Object.entries(runtime?.learning?.sequences || {});
   if (!entries.length) return 0;
@@ -1812,8 +1821,13 @@ function refreshHud() {
     for (let i = 0; i < MAX_ROUNDS; i += 1) html += `<span class="round-dot ${i < wins ? 'win' : ''}"></span>`;
     return html;
   };
-  dom.playerRounds.innerHTML = makeRoundDots(state.playerRoundWins);
-  dom.enemyRounds.innerHTML = makeRoundDots(state.cpuRoundWins);
+  const makeRoundStat = (runtime) => {
+    if (state.mode !== 'cpu-duel') return '';
+    const winRate = getLearningWinRate(runtime);
+    return `<span class="round-learning" title="Win rate from machine learning data">ML ${winRate === null ? '--' : `${winRate}%`}</span>`;
+  };
+  dom.playerRounds.innerHTML = `${makeRoundDots(state.playerRoundWins)}${makeRoundStat(state.learning.left)}`;
+  dom.enemyRounds.innerHTML = `${makeRoundDots(state.cpuRoundWins)}${makeRoundStat(state.learning.right)}`;
   dom.overlayText.textContent = state.overlayMessage;
 }
 
