@@ -2003,7 +2003,7 @@ function refreshHud() {
   const makeRoundStat = (runtime) => {
     if (state.mode !== 'cpu-duel') return '';
     const winRate = getLearningWinRate(runtime);
-    return `<span class="round-learning" title="Win rate from machine learning data">Vitor ${winRate === null ? '--' : `${winRate}%`}</span>`;
+    return `<span class="round-learning" title="Win rate from machine learning data">Vitory ${winRate === null ? '--' : `${winRate}%`}</span>`;
   };
   dom.playerRounds.innerHTML = `${makeRoundDots(state.playerRoundWins)}${makeRoundStat(state.learning.left)}`;
   dom.enemyRounds.innerHTML = `${makeRoundDots(state.cpuRoundWins)}${makeRoundStat(state.learning.right)}`;
