@@ -4,8 +4,8 @@ const path = require('path');
 let redis = null;
 try {
   const { Redis } = require('@upstash/redis');
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   if (url && token) {
     redis = new Redis({ url, token });
   }
@@ -39,6 +39,14 @@ function json(res, statusCode, payload) {
 
 function redisEnabled() {
   return Boolean(redis);
+}
+
+function isServerlessEnvironment() {
+  return process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY === 'true';
+}
+
+function hasDurableStorage() {
+  return redisEnabled();
 }
 
 function safeNumber(value) {
@@ -159,7 +167,80 @@ function mergeLearning(current, incoming) {
   return next;
 }
 
+function mergeLearningSnapshot(current, snapshot) {
+  const next = current || buildEmptyLearning(snapshot.cpuId, snapshot.opponentId);
+  const attackKinds = ['attack1', 'attack2'];
+  for (const attackKind of attackKinds) {
+    if (!next.attacks[attackKind]) {
+      next.attacks[attackKind] = { attempts: 0, hits: 0, totalDamage: 0 };
+    }
+    const stats = snapshot.attacks?.[attackKind] || {};
+    next.attacks[attackKind].attempts = Math.max(
+      safeNumber(next.attacks[attackKind].attempts),
+      safeNumber(stats.attempts)
+    );
+    next.attacks[attackKind].hits = Math.max(
+      safeNumber(next.attacks[attackKind].hits),
+      safeNumber(stats.hits)
+    );
+    next.attacks[attackKind].totalDamage = Math.max(
+      safeNumber(next.attacks[attackKind].totalDamage),
+      safeNumber(stats.totalDamage)
+    );
+  }
+
+  const snapshotResponses = snapshot.responses || {};
+  for (const [enemyAction, actions] of Object.entries(snapshotResponses)) {
+    if (!next.responses[enemyAction]) next.responses[enemyAction] = {};
+    for (const [responseAction, metrics] of Object.entries(actions || {})) {
+      if (!next.responses[enemyAction][responseAction]) {
+        next.responses[enemyAction][responseAction] = { count: 0, success: 0 };
+      }
+      next.responses[enemyAction][responseAction].count = Math.max(
+        safeNumber(next.responses[enemyAction][responseAction].count),
+        safeNumber(metrics?.count)
+      );
+      next.responses[enemyAction][responseAction].success = Math.max(
+        safeNumber(next.responses[enemyAction][responseAction].success),
+        safeNumber(metrics?.success)
+      );
+    }
+  }
+
+  const snapshotSequences = snapshot.sequences || {};
+  for (const [sequenceKey, metrics] of Object.entries(snapshotSequences)) {
+    if (!next.sequences[sequenceKey]) {
+      next.sequences[sequenceKey] = { count: 0, success: 0, totalDamage: 0 };
+    }
+    next.sequences[sequenceKey].count = Math.max(
+      safeNumber(next.sequences[sequenceKey].count),
+      safeNumber(metrics?.count)
+    );
+    next.sequences[sequenceKey].success = Math.max(
+      safeNumber(next.sequences[sequenceKey].success),
+      safeNumber(metrics?.success)
+    );
+    next.sequences[sequenceKey].totalDamage = Math.max(
+      safeNumber(next.sequences[sequenceKey].totalDamage),
+      safeNumber(metrics?.totalDamage)
+    );
+  }
+
+  next.matches = Math.max(safeNumber(next.matches), safeNumber(snapshot.matches));
+  next.wins = Math.max(safeNumber(next.wins), safeNumber(snapshot.wins));
+  next.losses = Math.max(safeNumber(next.losses), safeNumber(snapshot.losses));
+  next.lastUpdatedAt = Math.max(safeNumber(next.lastUpdatedAt), safeNumber(snapshot.lastUpdatedAt), now());
+  return next;
+}
+
 module.exports = async function handler(req, res) {
+  if (isServerlessEnvironment() && !hasDurableStorage()) {
+    return json(res, 503, {
+      ok: false,
+      error: 'Persistencia indisponivel: configure UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN ou KV_REST_API_URL/KV_REST_API_TOKEN na Vercel.'
+    });
+  }
+
   if (req.method === 'GET') {
     const cpuId = sanitizeFighterId(req.query.cpuId);
     const opponentId = sanitizeFighterId(req.query.opponentId);
@@ -196,6 +277,10 @@ module.exports = async function handler(req, res) {
     sequences: body.sequences || {},
     won: body.won
   });
-  await saveLearning(cpuId, opponentId, merged);
-  return json(res, 200, { ok: true, learning: merged });
+  const snapshot = body.snapshot && typeof body.snapshot === 'object' ? body.snapshot : null;
+  const withSnapshot = snapshot && sanitizeFighterId(snapshot.cpuId) === cpuId && sanitizeFighterId(snapshot.opponentId) === opponentId
+    ? mergeLearningSnapshot(merged, snapshot)
+    : merged;
+  await saveLearning(cpuId, opponentId, withSnapshot);
+  return json(res, 200, { ok: true, learning: withSnapshot });
 };

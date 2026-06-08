@@ -406,6 +406,53 @@ function pickMostCompleteLearning(primary, secondary) {
   return primary;
 }
 
+function mergeLearningSnapshotsByMax(primary, secondary) {
+  if (!primary && !secondary) return null;
+  if (!primary) return secondary;
+  if (!secondary) return primary;
+  const base = primary;
+  const other = secondary;
+  const attackKinds = ['attack1', 'attack2'];
+  for (const attackKind of attackKinds) {
+    if (!base.attacks[attackKind]) {
+      base.attacks[attackKind] = { attempts: 0, hits: 0, totalDamage: 0 };
+    }
+    const currentStats = base.attacks[attackKind] || {};
+    const incomingStats = other.attacks?.[attackKind] || {};
+    base.attacks[attackKind].attempts = Math.max(safePositiveNumber(currentStats.attempts), safePositiveNumber(incomingStats.attempts));
+    base.attacks[attackKind].hits = Math.max(safePositiveNumber(currentStats.hits), safePositiveNumber(incomingStats.hits));
+    base.attacks[attackKind].totalDamage = Math.max(safePositiveNumber(currentStats.totalDamage), safePositiveNumber(incomingStats.totalDamage));
+  }
+
+  for (const [enemyAction, actionStats] of Object.entries(other.responses || {})) {
+    if (!base.responses[enemyAction]) base.responses[enemyAction] = {};
+    for (const [responseAction, metrics] of Object.entries(actionStats || {})) {
+      if (!base.responses[enemyAction][responseAction]) {
+        base.responses[enemyAction][responseAction] = { count: 0, success: 0 };
+      }
+      const existing = base.responses[enemyAction][responseAction];
+      base.responses[enemyAction][responseAction].count = Math.max(safePositiveNumber(existing.count), safePositiveNumber(metrics.count));
+      base.responses[enemyAction][responseAction].success = Math.max(safePositiveNumber(existing.success), safePositiveNumber(metrics.success));
+    }
+  }
+
+  for (const [sequenceKey, metrics] of Object.entries(other.sequences || {})) {
+    if (!base.sequences[sequenceKey]) {
+      base.sequences[sequenceKey] = { count: 0, success: 0, totalDamage: 0 };
+    }
+    const existing = base.sequences[sequenceKey];
+    base.sequences[sequenceKey].count = Math.max(safePositiveNumber(existing.count), safePositiveNumber(metrics.count));
+    base.sequences[sequenceKey].success = Math.max(safePositiveNumber(existing.success), safePositiveNumber(metrics.success));
+    base.sequences[sequenceKey].totalDamage = Math.max(safePositiveNumber(existing.totalDamage), safePositiveNumber(metrics.totalDamage));
+  }
+
+  base.matches = Math.max(safePositiveNumber(base.matches), safePositiveNumber(other.matches));
+  base.wins = Math.max(safePositiveNumber(base.wins), safePositiveNumber(other.wins));
+  base.losses = Math.max(safePositiveNumber(base.losses), safePositiveNumber(other.losses));
+  base.lastUpdatedAt = Math.max(safePositiveNumber(base.lastUpdatedAt), safePositiveNumber(other.lastUpdatedAt), Date.now());
+  return base;
+}
+
 function mergeLearningSnapshot(current, incoming) {
   const next = current || createEmptyCpuLearning(incoming.cpuId, incoming.opponentId);
   const attackKinds = ['attack1', 'attack2'];
@@ -493,7 +540,10 @@ async function loadCpuLearning(cpuId, opponentId) {
     if (!response.ok) return local || createEmptyCpuLearning(cpuId, opponentId);
     const data = await response.json().catch(() => ({}));
     const remote = data.learning || null;
-    const learning = pickMostCompleteLearning(remote, local) || createEmptyCpuLearning(cpuId, opponentId);
+    const learning = mergeLearningSnapshotsByMax(
+      pickMostCompleteLearning(remote, local) || createEmptyCpuLearning(cpuId, opponentId),
+      pickMostCompleteLearning(local, remote)
+    ) || createEmptyCpuLearning(cpuId, opponentId);
     saveLocalCpuLearning(learning);
     return learning;
   } catch {
@@ -661,12 +711,20 @@ async function flushCpuLearning(resultByCpuId) {
           attacks: runtime.session.attacks,
           responses: runtime.session.responses,
           sequences: runtime.session.sequences,
-          won
+          won,
+          snapshot: mergedLocal
         })
       });
       const data = await response.json().catch(() => ({}));
-      if (response.ok && data.learning) {
-        const bestLearning = pickMostCompleteLearning(data.learning, mergedLocal);
+      if (!response.ok || data.ok === false) {
+        runtime.flushed = false;
+        return;
+      }
+      if (data.learning) {
+        const bestLearning = mergeLearningSnapshotsByMax(
+          pickMostCompleteLearning(data.learning, mergedLocal),
+          pickMostCompleteLearning(mergedLocal, data.learning)
+        ) || mergedLocal;
         saveLocalCpuLearning(bestLearning);
       }
     } catch {
