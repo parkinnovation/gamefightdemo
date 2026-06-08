@@ -658,13 +658,13 @@ function recordAttackHit(runtime, kind, damage) {
   runtime.lastAttack = kind;
 }
 
-function getLearningWinRate(runtime) {
+function getLearningWinSummary(runtime) {
   const learning = runtime?.learning;
   if (!learning) return null;
   const matches = Number(learning.matches || 0);
   if (matches <= 0) return null;
   const wins = Number(learning.wins || 0);
-  return Math.round((wins / matches) * 100);
+  return `${wins}/${matches}`;
 }
 
 function chooseBestSequenceBoost(runtime, attackKind) {
@@ -2002,8 +2002,8 @@ function refreshHud() {
   };
   const makeRoundStat = (runtime) => {
     if (state.mode !== 'cpu-duel') return '';
-    const winRate = getLearningWinRate(runtime);
-    return `<span class="round-learning" title="Win rate from machine learning data">Vitory ${winRate === null ? '--' : `${winRate}%`}</span>`;
+    const winSummary = getLearningWinSummary(runtime);
+    return `<span class="round-learning" title="Resumo de vitórias e partidas da aprendizagem de máquina">Vitórias ${winSummary === null ? '--' : winSummary}</span>`;
   };
   dom.playerRounds.innerHTML = `${makeRoundDots(state.playerRoundWins)}${makeRoundStat(state.learning.left)}`;
   dom.enemyRounds.innerHTML = `${makeRoundDots(state.cpuRoundWins)}${makeRoundStat(state.learning.right)}`;
