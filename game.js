@@ -664,9 +664,8 @@ function getLearningWinSummary(runtime) {
   const matches = Number(learning.matches || 0);
   if (matches <= 0) return null;
   const wins = Number(learning.wins || 0);
-  const losses = Math.max(matches - wins, 0);
   const winRate = Math.round((wins / matches) * 100);
-  return `${wins}/${losses} (${winRate}%)`;
+  return `${wins}/${matches} (${winRate}%)`;
 }
 
 function chooseBestSequenceBoost(runtime, attackKind) {
