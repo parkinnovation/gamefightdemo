@@ -664,7 +664,9 @@ function getLearningWinSummary(runtime) {
   const matches = Number(learning.matches || 0);
   if (matches <= 0) return null;
   const wins = Number(learning.wins || 0);
-  return `${wins}/${matches}`;
+  const losses = Math.max(matches - wins, 0);
+  const winRate = Math.round((wins / matches) * 100);
+  return `${wins}/${losses} (${winRate}%)`;
 }
 
 function chooseBestSequenceBoost(runtime, attackKind) {
@@ -2003,7 +2005,7 @@ function refreshHud() {
   const makeRoundStat = (runtime) => {
     if (state.mode !== 'cpu-duel') return '';
     const winSummary = getLearningWinSummary(runtime);
-    return `<span class="round-learning" title="Resumo de vitórias e partidas da aprendizagem de máquina">Vitórias ${winSummary === null ? '--' : winSummary}</span>`;
+    return `<span class="round-learning" title="Resumo de Vitory e partidas da aprendizagem de máquina">Vitory ${winSummary === null ? '--' : winSummary}</span>`;
   };
   dom.playerRounds.innerHTML = `${makeRoundDots(state.playerRoundWins)}${makeRoundStat(state.learning.left)}`;
   dom.enemyRounds.innerHTML = `${makeRoundDots(state.cpuRoundWins)}${makeRoundStat(state.learning.right)}`;
