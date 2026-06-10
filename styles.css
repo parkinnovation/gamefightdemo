@@ -174,10 +174,10 @@ h1 {
   background: linear-gradient(180deg, #111827, #0b1220);
   border: 2px solid #334155;
   border-radius: 12px;
-  padding: 8px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 3px;
   cursor: pointer;
   transition: 0.2s ease;
 }
@@ -204,7 +204,7 @@ h1 {
 .character-card canvas.character-sprite,
 .character-preview {
   width: 100%;
-  height: clamp(80px, 20vw, 150px);
+  height: clamp(27px, 6.67vw, 50px);
   object-fit: contain;
   background: #020617;
   border-radius: 8px;
@@ -218,7 +218,7 @@ h1 {
 }
 
 .card-title {
-  margin-top: 6px;
+  margin-top: 2px;
   font-weight: 700;
 }
 
@@ -590,19 +590,19 @@ canvas {
   }
 
   .character-card {
-    padding: 2px 4px;
-    gap: 2px;
+    padding: 1px 2px;
+    gap: 1px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    height: clamp(18px, 9vw, 28px);
+    height: clamp(6px, 3vw, 9px);
   }
 
   .card-title {
     margin-top: 0;
-    font-size: 0.5rem;
+    font-size: 0.34rem;
     line-height: 0.95;
   }
 
