@@ -7,7 +7,7 @@
   },
   "headers": [
     {
-      "source": "/AssetsGame/Background/(.*)",
+      "source": "/Background/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

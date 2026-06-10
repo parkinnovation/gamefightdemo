@@ -5,6 +5,7 @@ const GRAVITY = 0.95;
 const ROUND_TIME = 60;
 const MAX_ROUNDS = 2;
 const ASSET_ROOT_CANDIDATES = ['AssetsGame'];
+const BACKGROUND_ROOT_CANDIDATES = ['Background'];
 const FRAME_COUNT = 12;
 const ONLINE_STATE_PUSH_INTERVAL_MS = 33;
 const ONLINE_API_POLL_INTERVAL_MS = 250;
@@ -39,10 +40,10 @@ const ACTION_ASSET_CANDIDATES = {
   ko: ['ko', 'dead', 'death']
 };
 const ARENA_BACKGROUND_ASSET_CANDIDATES = [
-  getAssetCandidates('Background', 'bg1.jpg')[0],
-  getAssetCandidates('Background', 'bg2.jpg')[0],
-  getAssetCandidates('Background', 'bg3.jpg')[0],
-  getAssetCandidates('Background', 'bg4.jpg')[0]
+  getAssetCandidatesFromRoots(BACKGROUND_ROOT_CANDIDATES, 'Background', 'bg1.jpg')[0],
+  getAssetCandidatesFromRoots(BACKGROUND_ROOT_CANDIDATES, 'Background', 'bg2.jpg')[0],
+  getAssetCandidatesFromRoots(BACKGROUND_ROOT_CANDIDATES, 'Background', 'bg3.jpg')[0],
+  getAssetCandidatesFromRoots(BACKGROUND_ROOT_CANDIDATES, 'Background', 'bg4.jpg')[0]
 ];
 
 const state = {
@@ -1153,6 +1154,10 @@ function bindTouchControls() {
 
 function getAssetCandidates(folder, fileName) {
   return ASSET_ROOT_CANDIDATES.map((root) => `${root}/${folder}/${fileName}`);
+}
+
+function getAssetCandidatesFromRoots(roots, folder, fileName) {
+  return roots.map((root) => `${root}/${folder}/${fileName}`);
 }
 
 function getCharacterCandidates(character) {
