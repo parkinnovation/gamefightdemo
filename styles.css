@@ -636,6 +636,29 @@ canvas {
   }
 }
 
+@media (max-width: 600px) and (orientation: portrait) {
+  .character-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .character-card {
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .character-card .character-sprite,
+  .character-card canvas.character-sprite,
+  .character-preview {
+    height: clamp(30px, 14vw, 52px);
+  }
+
+  .card-title {
+    font-size: 0.48rem;
+    line-height: 0.95;
+  }
+}
+
 @media (pointer: coarse), (max-width: 900px) {
   body {
     padding-bottom: env(safe-area-inset-bottom);
