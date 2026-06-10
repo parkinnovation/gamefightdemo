@@ -38,6 +38,12 @@ const ACTION_ASSET_CANDIDATES = {
   hurt: ['hurt', 'hit', 'damage'],
   ko: ['ko', 'dead', 'death']
 };
+const ARENA_BACKGROUND_ASSET_CANDIDATES = [
+  'Background/bg1.jpg',
+  'Background/bg2.jpg',
+  'Background/bg3.jpg',
+  'Background/bg4.jpg'
+];
 
 const state = {
   mode: 'cpu',
@@ -80,6 +86,7 @@ const state = {
   roundOver: false,
   gameOver: false,
   overlayMessage: '',
+  arenaBackground: '',
   localControls: {
     pressed: {},
     jumpQueued: false,
@@ -1649,6 +1656,7 @@ function buildMatchSnapshot() {
     cpu: serializeFighter(cpu),
     playerChoice: state.playerChoice,
     cpuChoice: state.cpuChoice,
+    arenaBackground: state.arenaBackground,
     round: state.round,
     timer: state.timer,
     playerRoundWins: state.playerRoundWins,
@@ -1718,6 +1726,10 @@ function applyMatchSnapshot(snapshot) {
   const cpuSnapshot = isGuest ? snapshot.player : snapshot.cpu;
   applyFighterSnapshot(player, playerSnapshot);
   applyFighterSnapshot(cpu, cpuSnapshot);
+  if (snapshot.arenaBackground) {
+    state.arenaBackground = snapshot.arenaBackground;
+    dom.canvas.style.backgroundImage = `url("${snapshot.arenaBackground}"), linear-gradient(180deg, #1e293b, #0f172a)`;
+  }
   state.round = snapshot.round;
   state.timer = snapshot.timer;
   state.playerRoundWins = isGuest ? snapshot.cpuRoundWins : snapshot.playerRoundWins;
@@ -1734,6 +1746,9 @@ function startOnlineMatch(snapshot) {
     state.playerChoice = state.playerChoice || { ...state.online.localChoice };
     state.cpuChoice = state.cpuChoice || (state.online.remoteChoice ? { ...state.online.remoteChoice } : null);
     if (!state.playerChoice || !state.cpuChoice) return;
+    if (!state.arenaBackground) {
+      setArenaBackground();
+    }
     state.running = true;
     state.roundOver = false;
     state.gameOver = false;
@@ -1761,6 +1776,12 @@ function startOnlineMatch(snapshot) {
       state.cpuChoice = state.cpuChoice || snapshot.cpuChoice || (state.online.remoteChoice ? { ...state.online.remoteChoice } : null);
     }
     if (!state.playerChoice || !state.cpuChoice) return;
+    if (snapshot.arenaBackground) {
+      state.arenaBackground = snapshot.arenaBackground;
+      dom.canvas.style.backgroundImage = `url("${snapshot.arenaBackground}"), linear-gradient(180deg, #1e293b, #0f172a)`;
+    } else if (!state.arenaBackground) {
+      setArenaBackground();
+    }
     startRound(false);
     applyMatchSnapshot(snapshot);
   }
@@ -1865,19 +1886,14 @@ function pixelMasksIntersect(a, b) {
 }
 
 function drawArena() {
-  const sky = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
-  sky.addColorStop(0, '#334155');
-  sky.addColorStop(1, '#0f172a');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(0, GROUND_Y + 10, GAME_WIDTH, GAME_HEIGHT - GROUND_Y);
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, GROUND_Y + 10);
-  ctx.lineTo(GAME_WIDTH, GROUND_Y + 10);
-  ctx.stroke();
+  ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+}
+
+function setArenaBackground() {
+  if (!ARENA_BACKGROUND_ASSET_CANDIDATES.length) return;
+  const background = ARENA_BACKGROUND_ASSET_CANDIDATES[Math.floor(Math.random() * ARENA_BACKGROUND_ASSET_CANDIDATES.length)];
+  state.arenaBackground = background;
+  dom.canvas.style.backgroundImage = `url("${background}"), linear-gradient(180deg, #1e293b, #0f172a)`;
 }
 
 function updateFacing() {
@@ -2125,6 +2141,9 @@ function startTimer() {
 function startRound(showIntro = true) {
   state.roundOver = false;
   state.timer = ROUND_TIME;
+  if (!state.arenaBackground) {
+    setArenaBackground();
+  }
   player = new Fighter({
     name: state.playerChoice.name,
     folder: state.playerChoice.folder,
@@ -2177,6 +2196,7 @@ async function beginFight() {
     state.cpuRoundWins = 0;
     state.round = 1;
     state.gameOver = false;
+    setArenaBackground();
     await initializeCpuLearningContexts();
     state.running = true;
     dom.selectScreen.classList.remove('active');
@@ -2194,6 +2214,7 @@ async function beginFight() {
     state.cpuRoundWins = 0;
     state.round = 1;
     state.gameOver = false;
+    setArenaBackground();
     await initializeCpuLearningContexts();
     state.running = true;
     dom.selectScreen.classList.remove('active');
@@ -2293,6 +2314,8 @@ function resetToSelect() {
   state.learning.left = null;
   state.learning.right = null;
   state.overlayMessage = '';
+  state.arenaBackground = '';
+  dom.canvas.style.backgroundImage = '';
   clearTouchButtonStates();
   closeOnlineTransport();
   refreshModeUi();
