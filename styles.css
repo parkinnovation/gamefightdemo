@@ -164,7 +164,7 @@ h1 {
 
 .character-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin: 0 auto 20px;
   max-width: 980px;
@@ -174,7 +174,10 @@ h1 {
   background: linear-gradient(180deg, #111827, #0b1220);
   border: 2px solid #334155;
   border-radius: 12px;
-  padding: 10px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   cursor: pointer;
   transition: 0.2s ease;
 }
@@ -196,11 +199,12 @@ h1 {
   box-shadow: 0 0 0 2px #ef444455;
 }
 
-.character-card img,
-.character-card canvas,
+
+.character-card .character-sprite,
+.character-card canvas.character-sprite,
 .character-preview {
   width: 100%;
-  height: 130px;
+  height: clamp(80px, 20vw, 150px);
   object-fit: contain;
   background: #020617;
   border-radius: 8px;
@@ -214,7 +218,7 @@ h1 {
 }
 
 .card-title {
-  margin-top: 10px;
+  margin-top: 6px;
   font-weight: 700;
 }
 
@@ -580,23 +584,24 @@ canvas {
   }
 
   .character-grid {
-    grid-template-columns: repeat(2, minmax(118px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     max-width: 100%;
   }
 
   .character-card {
-    padding: 3px;
+    padding: 4px 6px;
+    gap: 6px;
   }
 
-  .character-card img,
-  .character-card canvas,
+  .character-card .character-sprite,
+  .character-card canvas.character-sprite,
   .character-preview {
-    height: 26px;
+    height: clamp(54px, 26vw, 84px);
   }
 
   .card-title {
-    margin-top: 4px;
+    margin-top: 2px;
     font-size: 0.58rem;
     line-height: 1;
   }
