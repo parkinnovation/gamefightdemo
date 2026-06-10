@@ -100,6 +100,14 @@ function contentTypeFor(filePath) {
   return 'application/octet-stream';
 }
 
+function cacheControlFor(filePath) {
+  const normalized = path.resolve(filePath);
+  if (normalized.includes(`${path.sep}Background${path.sep}`)) {
+    return 'public, max-age=31536000, immutable';
+  }
+  return 'no-store';
+}
+
 function sanitizeFighterId(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
 }
@@ -281,7 +289,7 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(200, {
     'Content-Type': contentTypeFor(filePath),
-    'Cache-Control': 'no-store'
+    'Cache-Control': cacheControlFor(filePath)
   });
   fs.createReadStream(filePath).pipe(res);
 });
