@@ -464,29 +464,56 @@ canvas {
 
 @media (min-width: 901px) {
   #character-select {
-    padding: 48px 20px;
+    padding: 56px 24px;
   }
 
   .character-grid {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    max-width: 1120px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 24px;
+    max-width: 1280px;
+    margin: 0 auto 28px;
   }
 
   .character-card {
-    padding: 8px;
-    gap: 6px;
+    padding: 16px 18px;
+    gap: 12px;
+    min-height: 280px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    height: clamp(72px, 8vw, 110px);
+    height: clamp(180px, 18vw, 260px);
   }
 
   .card-title {
-    margin-top: 4px;
-    font-size: 1rem;
+    margin-top: 8px;
+    font-size: 1.1rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  .character-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 28px;
+    max-width: 1440px;
+  }
+
+  .character-card {
+    min-height: 320px;
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .character-card .character-sprite,
+  .character-card canvas.character-sprite,
+  .character-preview {
+    height: clamp(220px, 14vw, 320px);
+  }
+
+  .card-title {
+    font-size: 1.2rem;
+    letter-spacing: 0.04em;
   }
 }
 
