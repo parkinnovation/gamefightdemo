@@ -581,18 +581,24 @@ canvas {
 
   .character-grid {
     grid-template-columns: repeat(2, minmax(118px, 1fr));
-    gap: 8px;
+    gap: 6px;
     max-width: 100%;
   }
 
   .character-card {
-    padding: 8px;
+    padding: 6px;
   }
 
   .character-card img,
   .character-card canvas,
   .character-preview {
-    height: 110px;
+    height: 78px;
+  }
+
+  .card-title {
+    margin-top: 6px;
+    font-size: 0.78rem;
+    line-height: 1.1;
   }
 
   #start-fight {
