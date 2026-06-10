@@ -353,6 +353,9 @@ canvas {
   width: 100%;
   max-height: 72vh;
   background: linear-gradient(#1e293b, #0f172a);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   border-radius: 14px;
   border: 1px solid #334155;
   display: block;
