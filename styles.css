@@ -459,6 +459,20 @@ canvas {
 }
 
 @media (max-width: 900px) {
+  .app {
+    padding: 12px 12px 18px;
+  }
+
+  #character-select {
+    padding: 28px 12px;
+  }
+
+  #fight-screen {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    gap: 12px;
+  }
+
   .hud {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 8px;
@@ -470,7 +484,7 @@ canvas {
   }
 
   .player-side .name {
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     margin-bottom: 4px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -493,7 +507,7 @@ canvas {
   }
 
   .round-learning {
-    font-size: 0.58rem;
+    font-size: 0.6rem;
   }
 
   .center-info {
@@ -501,12 +515,20 @@ canvas {
   }
 
   .label {
-    font-size: 0.62rem;
+    font-size: 0.64rem;
   }
 
   .value,
   .timer {
-    font-size: 0.9rem;
+    font-size: 0.96rem;
+  }
+
+  .arena-wrap {
+    margin-top: 0;
+  }
+
+  canvas {
+    aspect-ratio: 1200 / 620;
   }
 
   .player-side.right {
@@ -515,38 +537,52 @@ canvas {
 }
 
 @media (pointer: coarse), (max-width: 900px) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
   .touch-controls {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    padding: 10px 12px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    width: min(520px, 100%);
+    margin: 12px auto 0;
   }
 
   canvas {
-    max-height: 42vh;
+    max-height: 65vh;
+    min-height: 48vh;
   }
 
   .touch-cluster.movement {
-    grid-template-columns: repeat(2, minmax(52px, 1fr));
+    grid-template-columns: repeat(2, minmax(60px, 1fr));
   }
 
   .touch-cluster.actions {
     min-width: 0;
+    gap: 14px;
+  }
+
+  .action-row {
+    grid-template-columns: repeat(2, minmax(56px, 1fr));
+    gap: 10px;
   }
 
   .touch-btn {
-    min-height: 52px;
-    min-width: 52px;
+    min-height: 56px;
+    min-width: 56px;
   }
 
   .touch-btn.action-jump {
-    min-width: 60px;
-    min-height: 60px;
+    min-width: 66px;
+    min-height: 66px;
   }
 
   .touch-btn.action-hit,
   .touch-btn.action-kick {
-    min-width: 54px;
-    min-height: 54px;
+    min-width: 58px;
+    min-height: 58px;
   }
 }
