@@ -586,19 +586,19 @@ canvas {
   }
 
   .character-card {
-    padding: 6px;
+    padding: 3px;
   }
 
   .character-card img,
   .character-card canvas,
   .character-preview {
-    height: 78px;
+    height: 26px;
   }
 
   .card-title {
-    margin-top: 6px;
-    font-size: 0.78rem;
-    line-height: 1.1;
+    margin-top: 4px;
+    font-size: 0.58rem;
+    line-height: 1;
   }
 
   #start-fight {
