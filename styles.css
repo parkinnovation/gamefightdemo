@@ -590,20 +590,20 @@ canvas {
   }
 
   .character-card {
-    padding: 4px 6px;
-    gap: 6px;
+    padding: 2px 4px;
+    gap: 2px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    height: clamp(54px, 26vw, 84px);
+    height: clamp(18px, 9vw, 28px);
   }
 
   .card-title {
-    margin-top: 2px;
-    font-size: 0.58rem;
-    line-height: 1;
+    margin-top: 0;
+    font-size: 0.5rem;
+    line-height: 0.95;
   }
 
   #start-fight {
