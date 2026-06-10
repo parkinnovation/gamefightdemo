@@ -39,10 +39,10 @@ const ACTION_ASSET_CANDIDATES = {
   ko: ['ko', 'dead', 'death']
 };
 const ARENA_BACKGROUND_ASSET_CANDIDATES = [
-  'Background/bg1.jpg',
-  'Background/bg2.jpg',
-  'Background/bg3.jpg',
-  'Background/bg4.jpg'
+  getAssetCandidates('Background', 'bg1.jpg')[0],
+  getAssetCandidates('Background', 'bg2.jpg')[0],
+  getAssetCandidates('Background', 'bg3.jpg')[0],
+  getAssetCandidates('Background', 'bg4.jpg')[0]
 ];
 
 const state = {
