@@ -467,7 +467,12 @@ canvas {
     padding: 28px 12px;
   }
 
-  #fight-screen {
+  .character-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+  }
+
+  #fight-screen.active {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto auto;
     gap: 12px;
@@ -533,6 +538,90 @@ canvas {
 
   .player-side.right {
     text-align: right;
+  }
+}
+
+@media (max-width: 600px) {
+  .app {
+    padding: 10px 8px 16px;
+  }
+
+  #character-select {
+    padding: 20px 10px;
+  }
+
+  .mode-switch {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .mode-option {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .online-panel {
+    max-width: 100%;
+    margin: 0 0 16px;
+  }
+
+  .room-card {
+    padding: 14px;
+  }
+
+  .room-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .room-row > * {
+    width: 100%;
+  }
+
+  .character-grid {
+    grid-template-columns: repeat(2, minmax(118px, 1fr));
+    gap: 8px;
+    max-width: 100%;
+  }
+
+  .character-card {
+    padding: 8px;
+  }
+
+  .character-card img,
+  .character-card canvas,
+  .character-preview {
+    height: 110px;
+  }
+
+  #start-fight {
+    width: 100%;
+  }
+
+  .hint {
+    font-size: 0.8rem;
+    margin-top: 12px;
+  }
+
+  .touch-controls {
+    width: 100%;
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+
+  .touch-cluster.movement {
+    grid-template-columns: repeat(2, minmax(52px, 1fr));
+  }
+
+  .touch-cluster.actions {
+    justify-items: stretch;
+    gap: 12px;
+  }
+
+  .touch-btn {
+    min-width: 52px;
+    min-height: 52px;
   }
 }
 
