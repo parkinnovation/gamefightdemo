@@ -492,6 +492,10 @@ canvas {
     margin-right: 4px;
   }
 
+  .round-learning {
+    font-size: 0.58rem;
+  }
+
   .center-info {
     align-self: center;
   }
