@@ -464,55 +464,55 @@ canvas {
 
 @media (min-width: 901px) {
   #character-select {
-    padding: 56px 24px;
+    padding: 36px 24px;
   }
 
   .character-grid {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 24px;
-    max-width: 1280px;
-    margin: 0 auto 28px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    max-width: 1240px;
+    margin: 0 auto 20px;
   }
 
   .character-card {
-    padding: 16px 18px;
-    gap: 12px;
-    min-height: 280px;
+    padding: 10px 12px;
+    gap: 8px;
+    min-height: 180px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    height: clamp(180px, 18vw, 260px);
+    height: clamp(100px, 11vw, 150px);
   }
 
   .card-title {
-    margin-top: 8px;
-    font-size: 1.1rem;
+    margin-top: 4px;
+    font-size: 0.92rem;
   }
 }
 
 @media (min-width: 1440px) {
   .character-grid {
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 28px;
-    max-width: 1440px;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 16px;
+    max-width: 1360px;
   }
 
   .character-card {
-    min-height: 320px;
-    padding: 20px;
-    gap: 16px;
+    min-height: 190px;
+    padding: 12px 14px;
+    gap: 10px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    height: clamp(220px, 14vw, 320px);
+    height: clamp(110px, 10vw, 160px);
   }
 
   .card-title {
-    font-size: 1.2rem;
+    font-size: 0.98rem;
     letter-spacing: 0.04em;
   }
 }
