@@ -33,6 +33,13 @@ Fluxo online:
 4. Host simula partida e envia snapshots (`type: state`)
 5. Guest renderiza snapshots via socket no modo local ou via polling HTTP na Vercel
 
+## SEO e descoberta
+
+- Metadados completos (Open Graph, Twitter, FAQ e `VideoGame` JSON-LD) adicionados em `index.html`.
+- Sessões de conteúdo textual (`#sobre`, `#llm-briefing`, `#faq`) fornecem contexto para buscadores e LLMs.
+- Arquivos de suporte criados: `robots.txt`, `sitemap.xml`, `.well-known/ai-plugin.json`, `.well-known/llm-manifest.json` e `openapi.yaml`.
+- `server.js` agora envia tipos de conteúdo adequados para `.json`, `.xml`, `.yaml` e `.txt`.
+
 ## Estrutura de assets
 
 O jogo tenta carregar sprites a partir de `AssetsGame`:
