@@ -133,6 +133,23 @@ let player;
 let cpu;
 let timerInterval;
 
+function fitGameCanvas() {
+  const wrap = dom.canvas.parentElement;
+  if (!wrap) return;
+  const availableWidth = wrap.clientWidth;
+  const availableHeight = wrap.clientHeight;
+  if (!availableWidth || !availableHeight) return;
+  const ratio = GAME_WIDTH / GAME_HEIGHT;
+  let renderWidth = availableWidth;
+  let renderHeight = renderWidth / ratio;
+  if (renderHeight > availableHeight) {
+    renderHeight = availableHeight;
+    renderWidth = renderHeight * ratio;
+  }
+  dom.canvas.style.width = `${Math.floor(renderWidth)}px`;
+  dom.canvas.style.height = `${Math.floor(renderHeight)}px`;
+}
+
 function logOnlineWs(event, details = {}) {
   console.log(ONLINE_WS_LOG_PREFIX, event, details);
 }
@@ -2207,6 +2224,7 @@ async function beginFight() {
     dom.selectScreen.classList.remove('active');
     dom.fightScreen.classList.add('active');
     startRound(true);
+    requestAnimationFrame(fitGameCanvas);
     requestAnimationFrame(tick);
     return;
   }
@@ -2225,6 +2243,7 @@ async function beginFight() {
     dom.selectScreen.classList.remove('active');
     dom.fightScreen.classList.add('active');
     startRound(true);
+    requestAnimationFrame(fitGameCanvas);
     requestAnimationFrame(tick);
     return;
   }
@@ -2340,6 +2359,12 @@ window.addEventListener('keyup', (event) => {
   handleControlChange(event.code, false);
 });
 
+window.addEventListener('resize', () => {
+  if (dom.fightScreen.classList.contains('active')) {
+    requestAnimationFrame(fitGameCanvas);
+  }
+});
+
 dom.modeCpuBtn.addEventListener('click', () => setMode('cpu'));
 if (dom.modeCpuDuelBtn) dom.modeCpuDuelBtn.addEventListener('click', () => setMode('cpu-duel'));
 if (dom.modeOnlineBtn) dom.modeOnlineBtn.addEventListener('click', () => setMode('online'));
@@ -2353,3 +2378,4 @@ if (dom.roomCode) dom.roomCode.textContent = '-';
 bindTouchControls();
 buildCharacterSelect();
 refreshModeUi();
+requestAnimationFrame(fitGameCanvas);
