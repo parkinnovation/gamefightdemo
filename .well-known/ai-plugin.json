@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Game Fight Demo",
+  "name_for_model": "gamefight",
+  "description_for_human": "Aprenda e lute contra uma IA adaptativa com multiplayer online e estatísticas em tempo real.",
+  "description_for_model": "Game Fight Demo é um jogo de luta em navegador com IA adaptativa. Use os endpoints documentados para consultar estatísticas de aprendizado da CPU e informações de salas online.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://gamefightdemo.vercel.app/openapi.yaml",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://gamefightdemo.vercel.app/assets/favicon.svg",
+  "contact_email": "marketing@kyronex.com.br",
+  "legal_info_url": "https://www.kyronex.com.br/politica-de-privacidade"
+}

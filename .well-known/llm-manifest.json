@@ -1,0 +1,22 @@
+{
+  "version": "2026-06-13",
+  "name": "Game Fight Demo",
+  "summary": "Game Fight é um jogo de luta online com IA adaptativa que aprende com cada round, oferecendo modos Humano vs CPU, CPU vs CPU e partidas privadas.",
+  "languages": ["pt-BR", "en"],
+  "links": {
+    "homepage": "https://gamefightdemo.vercel.app/",
+    "sitemap": "https://gamefightdemo.vercel.app/sitemap.xml",
+    "apiSpec": "https://gamefightdemo.vercel.app/openapi.yaml",
+    "robots": "https://gamefightdemo.vercel.app/robots.txt"
+  },
+  "contacts": [
+    {
+      "type": "email",
+      "value": "marketing@kyronex.com.br"
+    }
+  ],
+  "usage": {
+    "pricing": "free-demo",
+    "license": "© 2026 Kyronex"
+  }
+}

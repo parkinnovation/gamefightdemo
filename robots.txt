@@ -1,0 +1,11 @@
+# Game Fight Demo robots.txt — updated 2026-06-13
+User-agent: *
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://gamefightdemo.vercel.app/sitemap.xml

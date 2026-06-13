@@ -1,0 +1,338 @@
+openapi: 3.1.0
+info:
+  title: Game Fight Demo API
+  description: >-
+    Endpoints públicos do Game Fight Demo para acessar estatísticas de aprendizado da CPU e
+    coordenar partidas online. Todos os retornos estão em JSON.
+  version: "1.0.0"
+  contact:
+    name: Kyronex Marketing
+    email: marketing@kyronex.com.br
+servers:
+  - url: https://gamefightdemo.vercel.app
+paths:
+  /api/cpu-learning:
+    get:
+      summary: Consulta estatísticas de aprendizado da CPU
+      description: >-
+        Retorna os dados acumulados da IA para uma combinação específica de CPU e oponente.
+      parameters:
+        - in: query
+          name: cpuId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+          description: Identificador do lutador controlado pela CPU.
+        - in: query
+          name: opponentId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+          description: Identificador do oponente humano ou CPU.
+      responses:
+        "200":
+          description: Dados retornados com sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CpuLearningResponse'
+        "400":
+          description: Parâmetros ausentes ou inválidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Atualiza estatísticas de aprendizado da CPU
+      description: >-
+        Mescla uma nova rodada de estatísticas de aprendizado com o histórico existente para a combinação CPU vs oponente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CpuLearningUpdate'
+      responses:
+        "200":
+          description: Estatísticas atualizadas com sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CpuLearningResponse'
+        "400":
+          description: Requisição inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/rooms:
+    get:
+      summary: Consulta estado de uma sala
+      description: >-
+        Retorna o estado atual da sala, novos comandos e snapshots dependendo do papel do solicitante.
+      parameters:
+        - in: query
+          name: roomId
+          required: true
+          schema:
+            type: string
+            maxLength: 12
+          description: Código alfanumérico da sala.
+        - in: query
+          name: role
+          required: true
+          schema:
+            type: string
+            enum: [host, guest]
+          description: Papel do solicitante para filtrar dados relevantes.
+        - in: query
+          name: since
+          schema:
+            type: integer
+            minimum: 0
+          description: Último identificador de comando recebido pelo host. Use 0 para receber tudo.
+      responses:
+        "200":
+          description: Estado atual da sala.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomStateResponse'
+    post:
+      summary: Opera sobre salas do modo online
+      description: >-
+        Executa ações de matchmaking e sincronização de estado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomActionRequest'
+      responses:
+        "200":
+          description: Ação processada com sucesso.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/RoomQueuedResponse'
+                  - $ref: '#/components/schemas/RoomActionAck'
+        "400":
+          description: Ação inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Sessão inválida para a ação solicitada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: Sala indisponível ou cheia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    CpuLearningAttack:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          minimum: 0
+        hits:
+          type: integer
+          minimum: 0
+        totalDamage:
+          type: number
+          minimum: 0
+      additionalProperties: false
+    CpuLearningResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        learning:
+          $ref: '#/components/schemas/CpuLearningSnapshot'
+      required: [ok, learning]
+    CpuLearningSnapshot:
+      type: object
+      properties:
+        version:
+          type: integer
+        cpuId:
+          type: string
+        opponentId:
+          type: string
+        matches:
+          type: integer
+        wins:
+          type: integer
+        losses:
+          type: integer
+        attacks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CpuLearningAttack'
+        responses:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: object
+              properties:
+                count:
+                  type: integer
+                success:
+                  type: integer
+              required: [count, success]
+        sequences:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              count:
+                type: integer
+              success:
+                type: integer
+              totalDamage:
+                type: number
+            required: [count, success, totalDamage]
+        lastUpdatedAt:
+          type: integer
+      required: [cpuId, opponentId]
+    CpuLearningUpdate:
+      type: object
+      properties:
+        cpuId:
+          type: string
+          maxLength: 32
+        opponentId:
+          type: string
+          maxLength: 32
+        attacks:
+          type: object
+        responses:
+          type: object
+        sequences:
+          type: object
+        won:
+          type: boolean
+      required: [cpuId, opponentId]
+      additionalProperties: false
+    RoomStateResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        room:
+          type: object
+          nullable: true
+          properties:
+            hostChoice:
+              type: string
+              nullable: true
+            guestChoice:
+              type: string
+              nullable: true
+            guestControls:
+              type: object
+              nullable: true
+              properties:
+                pressed:
+                  type: object
+                  additionalProperties:
+                    type: boolean
+            newCommands:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  command:
+                    type: string
+                  createdAt:
+                    type: integer
+            latestSnapshot:
+              type: object
+              nullable: true
+            matchStarted:
+              type: boolean
+            matchEnded:
+              type: boolean
+            closed:
+              type: boolean
+            closedReason:
+              type: string
+              nullable: true
+      required: [ok]
+    RoomActionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [play, join, input, command, state, match-start, match-end, close]
+        roomId:
+          type: string
+          maxLength: 12
+        sessionId:
+          type: string
+        choice:
+          type: string
+        controls:
+          type: object
+          properties:
+            pressed:
+              type: object
+        command:
+          type: string
+        snapshot:
+          type: object
+        hostChoice:
+          type: string
+        guestChoice:
+          type: string
+      required: [action]
+    RoomQueuedResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        role:
+          type: string
+          enum: [host, guest]
+        roomId:
+          type: string
+        sessionId:
+          type: string
+        hostChoice:
+          type: string
+          nullable: true
+      required: [ok, role, roomId, sessionId]
+    RoomActionAck:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        commandId:
+          type: integer
+          nullable: true
+        sessionId:
+          type: string
+          nullable: true
+      required: [ok]
+    ErrorResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          default: false
+        error:
+          type: string
+      required: [ok, error]

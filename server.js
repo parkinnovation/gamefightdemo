@@ -94,6 +94,10 @@ function contentTypeFor(filePath) {
   if (ext === '.html') return 'text/html; charset=utf-8';
   if (ext === '.css') return 'text/css; charset=utf-8';
   if (ext === '.js') return 'application/javascript; charset=utf-8';
+  if (ext === '.json') return 'application/json; charset=utf-8';
+  if (ext === '.txt') return 'text/plain; charset=utf-8';
+  if (ext === '.xml') return 'application/xml; charset=utf-8';
+  if (ext === '.yaml' || ext === '.yml') return 'application/yaml; charset=utf-8';
   if (ext === '.png') return 'image/png';
   if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
   if (ext === '.svg') return 'image/svg+xml';
