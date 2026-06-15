@@ -1,4 +1,4 @@
-# Game Fight Demo robots.txt — updated 2026-06-13
+# Game Fight Demo robots.txt - updated 2026-06-14
 User-agent: *
 Allow: /
 
