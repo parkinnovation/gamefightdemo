@@ -763,6 +763,143 @@ canvas {
   }
 }
 
+@media (max-height: 720px) and (orientation: landscape) {
+  .app {
+    padding: 10px;
+  }
+
+  #character-select {
+    padding: 10px 8px 8px;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+
+  h1 {
+    font-size: clamp(1.5rem, 3vw, 2.4rem);
+  }
+
+  .subtitle {
+    margin: 4px 0 12px;
+  }
+
+  .mode-switch {
+    margin-bottom: 10px;
+  }
+
+  .online-panel {
+    margin-bottom: 12px;
+  }
+
+  .room-card {
+    padding: 12px;
+  }
+
+  .character-grid {
+    gap: 8px;
+    margin-bottom: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .character-card {
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .character-card .character-sprite,
+  .character-card canvas.character-sprite,
+  .character-preview {
+    height: clamp(54px, 8vw, 90px);
+  }
+
+  .card-title {
+    font-size: 0.62rem;
+  }
+
+  .hint {
+    margin-top: 8px;
+    font-size: 0.72rem;
+  }
+
+  #fight-screen.active {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .hud {
+    gap: 10px;
+    padding: 8px 10px;
+  }
+
+  .player-side .name {
+    font-size: 0.72rem;
+    margin-bottom: 3px;
+  }
+
+  .bar {
+    height: 10px;
+  }
+
+  .rounds {
+    margin-top: 3px;
+    min-height: 8px;
+    gap: 6px;
+  }
+
+  .round-dot {
+    width: 8px;
+    height: 8px;
+    margin-right: 3px;
+  }
+
+  .round-learning {
+    font-size: 0.56rem;
+  }
+
+  .label,
+  .value,
+  .timer {
+    font-size: 0.8rem;
+  }
+
+  .arena-wrap {
+    margin-top: 0;
+  }
+
+  .touch-controls {
+    margin-top: 8px;
+    padding: 10px 12px;
+    width: min(460px, 100%);
+  }
+
+  .touch-cluster.movement {
+    grid-template-columns: repeat(2, minmax(52px, 1fr));
+  }
+
+  .touch-cluster.actions {
+    gap: 10px;
+  }
+
+  .action-row {
+    gap: 8px;
+  }
+
+  .touch-btn {
+    min-width: 50px;
+    min-height: 50px;
+  }
+
+  .touch-btn.action-jump {
+    min-width: 60px;
+    min-height: 60px;
+  }
+
+  .touch-btn.action-hit,
+  .touch-btn.action-kick {
+    min-width: 54px;
+    min-height: 54px;
+  }
+}
+
 @media (pointer: coarse), (max-width: 900px) {
   body {
     padding-bottom: env(safe-area-inset-bottom);
