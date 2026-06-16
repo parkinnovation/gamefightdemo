@@ -1104,6 +1104,17 @@ function clearTouchButtonStates() {
   });
 }
 
+function isTouchLayoutActive() {
+  return window.matchMedia('(pointer: coarse), (max-width: 900px)').matches;
+}
+
+function refreshTouchControlsUi() {
+  if (!dom.touchControls) return;
+  const shouldShowTouchControls = isTouchLayoutActive() || state.mode === 'cpu-duel';
+  dom.touchControls.classList.toggle('hidden', !shouldShowTouchControls);
+  dom.touchControls.setAttribute('aria-hidden', shouldShowTouchControls ? 'false' : 'true');
+}
+
 function handleControlChange(code, isDown) {
   if (state.mode === 'online') {
     updateControlState(state.online.localControls, code, isDown);
@@ -1331,6 +1342,7 @@ function refreshModeUi() {
     if (dom.copyRoomCodeBtn) dom.copyRoomCodeBtn.disabled = true;
   }
   updateCharacterSelectionUi();
+  refreshTouchControlsUi();
 }
 
 function setMode(mode) {
@@ -2363,6 +2375,7 @@ window.addEventListener('resize', () => {
   if (dom.fightScreen.classList.contains('active')) {
     requestAnimationFrame(fitGameCanvas);
   }
+  refreshTouchControlsUi();
 });
 
 dom.modeCpuBtn.addEventListener('click', () => setMode('cpu'));
