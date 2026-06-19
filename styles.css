@@ -46,15 +46,22 @@ body {
   flex: 0 0 auto;
   padding: 0 16px 12px;
   text-align: center;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
 }
 
 .site-footer a {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
   color: var(--muted);
   text-decoration: none;
   font-size: 0.75rem;
   letter-spacing: 0.08em;
-  text-transform: capitalize;
+  text-transform: uppercase;
 }
 
 .site-footer a:hover {
@@ -200,12 +207,14 @@ h1 {
   border: 2px solid #334155;
   border-radius: 12px;
   padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
   cursor: pointer;
   transition: 0.2s ease;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .character-card:hover,
@@ -230,9 +239,10 @@ h1 {
 .character-card canvas.character-sprite,
 .character-preview {
   width: 100%;
-  flex: 1;
+  display: block;
+  flex: none;
   min-height: 0;
-  height: clamp(72px, 9vw, 132px);
+  height: 100%;
   object-fit: contain;
   background: #020617;
   border-radius: 8px;
@@ -241,18 +251,23 @@ h1 {
 .character-preview {
   display: grid;
   place-items: center;
-  font-weight: 900;
   color: #475569;
+  font-weight: 900;
 }
 
 .card-title {
-  margin-top: 0;
+  margin: 0;
+  align-self: end;
+  justify-self: center;
+  width: 100%;
   font-weight: 700;
   font-size: clamp(0.7rem, 0.85vw, 0.98rem);
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: center;
+  padding: 0 4px 2px;
 }
 
 button {
@@ -523,19 +538,16 @@ canvas {
 
   .character-card {
     padding: 10px 12px;
-    gap: 8px;
     min-height: 180px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    flex: 0 0 auto;
-    height: clamp(100px, 11vw, 150px);
+    height: 100%;
   }
 
   .card-title {
-    margin-top: 4px;
     font-size: 0.92rem;
   }
 }
@@ -550,14 +562,12 @@ canvas {
   .character-card {
     min-height: 190px;
     padding: 12px 14px;
-    gap: 10px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    flex: 0 0 auto;
-    height: clamp(110px, 10vw, 160px);
+    height: 100%;
   }
 
   .card-title {
@@ -692,19 +702,16 @@ canvas {
 
   .character-card {
     padding: 6px 4px;
-    gap: 4px;
     min-height: 0;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    flex: 1;
-    height: clamp(48px, 14vw, 76px);
+    height: 100%;
   }
 
   .card-title {
-    margin-top: 0;
     font-size: 0.52rem;
     line-height: 0.95;
   }
@@ -747,14 +754,12 @@ canvas {
 
   .character-card {
     padding: 6px 4px;
-    gap: 4px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    flex: 1;
-    height: clamp(44px, 12vw, 72px);
+    height: 100%;
   }
 
   .card-title {
@@ -802,13 +807,12 @@ canvas {
 
   .character-card {
     padding: 6px;
-    gap: 4px;
   }
 
   .character-card .character-sprite,
   .character-card canvas.character-sprite,
   .character-preview {
-    height: clamp(54px, 8vw, 90px);
+    height: 100%;
   }
 
   .card-title {
